@@ -1,10 +1,10 @@
 {
   "name": "Sotto le Stelle Manager",
-  "short_name": "Turni",
+  "short_name": "SLS Manager",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#111111",
-  "theme_color": "#111111",
+  "background_color": "#0e0e0e",
+  "theme_color": "#0e0e0e",
   "orientation": "portrait",
   "icons": [
     {

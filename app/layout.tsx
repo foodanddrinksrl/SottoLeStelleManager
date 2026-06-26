@@ -1,22 +1,15 @@
 import './globals.css';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
   title: 'Sotto le Stelle Manager',
-  description: 'Gestionale turni per pizzeria ristorante',
+  description: 'Gestionale professionale per pizzeria',
   manifest: '/manifest.json',
-  themeColor: '#111111',
-  appleWebApp: {
-    capable: true,
-    title: 'Sotto le Stelle',
-    statusBarStyle: 'black'
-  }
+  appleWebApp: { capable: true, title: 'Sotto le Stelle', statusBarStyle: 'black' }
 };
 
+export const viewport: Viewport = { themeColor: '#0e0e0e', width: 'device-width', initialScale: 1 };
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="it">
-      <body>{children}</body>
-    </html>
-  );
+  return <html lang="it"><body>{children}</body></html>;
 }
