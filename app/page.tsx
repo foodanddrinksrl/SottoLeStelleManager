@@ -53,9 +53,18 @@ export default function Page(){
   function updateSelect(g:string,t:string,r:Reparto,i:number,value:string){ setSchedule(s=>{const arr=[...(s[k(g,t,r)]||[])]; arr[i]=value; return {...s,[k(g,t,r)]:arr.filter(Boolean)}}); }
   function removeSelect(g:string,t:string,r:Reparto,i:number){ setSchedule(s=>{const arr=[...(s[k(g,t,r)]||[])]; arr.splice(i,1); return {...s,[k(g,t,r)]:arr};}); }
   function saveTurno(){ const snap={id:Date.now(),savedAt:new Date().toLocaleString('it-IT'),weekInfo,employees,schedule,closed,dayRests}; setHistory(h=>{const idx=h.findIndex(x=>x.weekInfo.start===weekInfo.start); if(idx>=0){const c=[...h]; c[idx]={...snap,id:c[idx].id}; return c} return [snap,...h]}); alert('Turno salvato nello storico.'); }
+ function replicaSettimanaSuccessiva(){
+  const nuovaSettimana = makeWeekInfo(new Date(addDays(weekInfo.start, 7) + 'T00:00:00'));
+  setWeekInfo(nuovaSettimana);
+  setSchedule({...schedule});
+  setClosed({...closed});
+  setDayRests({...dayRests});
+  setTab('calendario');
+  alert('Settimana replicata alla settimana successiva.');
+}
   function exportPdf(mode:'collaboratori'|'direzione'){ setPrintMode(mode); setTimeout(()=>window.print(),150); }
 
-  return <div><header className="topbar"><div><h1>🍕 Sotto le Stelle Manager</h1><p>{user} · Settimana {weekInfo.week} · dal {itDate(weekInfo.start)} al {itDate(weekInfo.end)}</p></div><div className="actions no-print"><button className="btn light" onClick={saveTurno}>Salva turno</button><button className="btn light" onClick={()=>exportPdf('collaboratori')}>PDF Collaboratori</button><button className="btn gold" onClick={()=>exportPdf('direzione')}>PDF Direzione</button><button className="btn light" onClick={()=>{localStorage.removeItem('slm_v3_logged');setLogged(false)}}>Esci</button></div></header>
+  return <div><header className="topbar"><div><h1>🍕 Sotto le Stelle Manager</h1><p>{user} · Settimana {weekInfo.week} · dal {itDate(weekInfo.start)} al {itDate(weekInfo.end)}</p></div><div className="actions no-print"><button className="btn light" onClick={saveTurno}>Salva turno</button><button className="btn green" onClick={replicaSettimanaSuccessiva}>Replica settimana successiva</button><button className="btn light" onClick={()=>exportPdf('collaboratori')}>PDF Collaboratori</button><button className="btn gold" onClick={()=>exportPdf('direzione')}>PDF Direzione</button><button className="btn light" onClick={()=>{localStorage.removeItem('slm_v3_logged');setLogged(false)}}>Esci</button></div></header>
     <nav className="nav no-print">{['dashboard','calendario','dipendenti','riepilogo','storico','impostazioni'].map(t=><button key={t} className={tab===t?'active':''} onClick={()=>setTab(t)}>{t[0].toUpperCase()+t.slice(1)}</button>)}</nav>
     <main className="container">
       {tab==='dashboard'&&<section><div className="dashboard"><div className="kpi gold"><span>Settimana</span><strong>{weekInfo.week}</strong></div><div className="kpi"><span>Turni totali</span><strong>{totals.turni}</strong></div><div className="kpi green"><span>Costo settimana</span><strong>€ {totals.costo.toFixed(0)}</strong></div><div className="kpi"><span>Dipendenti</span><strong>{employees.length}</strong></div></div><div className="card"><h2>Avvio rapido</h2><div className="actions"><button className="btn primary" onClick={()=>setTab('calendario')}>Apri calendario</button><button className="btn" onClick={()=>setTab('dipendenti')}>Gestisci dipendenti</button><button className="btn" onClick={()=>setTab('storico')}>Storico turni</button></div></div></section>}
