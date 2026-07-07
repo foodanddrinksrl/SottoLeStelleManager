@@ -9,6 +9,7 @@ import { Navigation } from './components/Navigation';
 import { SettingsSection } from './components/SettingsSection';
 import { Summary } from './components/Summary';
 import { TopBar } from './components/TopBar';
+import { WhatsAppSection } from './components/WhatsAppSection';
 import {
   addDays,
   calculateSummary,
@@ -164,6 +165,7 @@ export default function Page() {
         onReplica={replicaSettimanaSuccessiva}
         onExportCollaboratori={() => exportPdf('collaboratori')}
         onExportDirezione={() => exportPdf('direzione')}
+        onWhatsapp={() => setTab('whatsapp')}
         onLogout={() => {
           localStorage.removeItem('slm_v3_logged');
           setLogged(false);
@@ -205,6 +207,10 @@ export default function Page() {
         {tab === 'riepilogo' && <Summary summary={summary} totals={totals} />}
 
         {tab === 'storico' && <HistorySection history={history} setHistory={setHistory} openSnapshot={openSnapshot} />}
+
+        {tab === 'whatsapp' && (
+          <WhatsAppSection employees={employees} schedule={schedule} closed={closed} weekInfo={weekInfo} />
+        )}
 
         {tab === 'impostazioni' && <SettingsSection />}
 

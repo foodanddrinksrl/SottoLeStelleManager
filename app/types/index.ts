@@ -5,6 +5,7 @@ export type Dipendente = {
   reparto: Reparto;
   costoTurno: number;
   riposo?: string;
+  telefono?: string;
 };
 
 export type WeekInfo = {

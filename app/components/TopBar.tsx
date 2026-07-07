@@ -8,6 +8,7 @@ export function TopBar({
   onReplica,
   onExportCollaboratori,
   onExportDirezione,
+  onWhatsapp,
   onLogout,
 }: {
   user: string;
@@ -16,6 +17,7 @@ export function TopBar({
   onReplica: () => void;
   onExportCollaboratori: () => void;
   onExportDirezione: () => void;
+  onWhatsapp: () => void;
   onLogout: () => void;
 }) {
   return (
@@ -29,6 +31,7 @@ export function TopBar({
       <div className="actions no-print">
         <button className="btn light" onClick={onSave}>Salva turno</button>
         <button className="btn green" onClick={onReplica}>Replica settimana successiva</button>
+        <button className="btn whatsapp" onClick={onWhatsapp}>📲 Invia turni WhatsApp</button>
         <button className="btn light" onClick={onExportCollaboratori}>PDF Collaboratori</button>
         <button className="btn gold" onClick={onExportDirezione}>PDF Direzione</button>
         <button className="btn light" onClick={onLogout}>Esci</button>

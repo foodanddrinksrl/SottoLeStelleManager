@@ -6,7 +6,7 @@ export function EmployeesSection({ employees, setEmployees }: { employees: Dipen
     <section>
       <div className="card no-print actions">
         {reparti.map((r) => (
-          <button key={r} className="btn primary" onClick={() => setEmployees([...employees, { nome: '', reparto: r, costoTurno: 50, riposo: '' }])}>+ {r}</button>
+          <button key={r} className="btn primary" onClick={() => setEmployees([...employees, { nome: '', reparto: r, costoTurno: 50, riposo: '', telefono: '' }])}>+ {r}</button>
         ))}
       </div>
       {reparti.map((r) => (
@@ -19,6 +19,7 @@ export function EmployeesSection({ employees, setEmployees }: { employees: Dipen
                 <input value={e.nome} placeholder="Nome" onChange={(ev) => { const c = [...employees]; c[idx].nome = ev.target.value; setEmployees(c); }} />
                 <input type="number" value={e.costoTurno} onChange={(ev) => { const c = [...employees]; c[idx].costoTurno = Number(ev.target.value); setEmployees(c); }} />
                 <input value={e.riposo || ''} placeholder="Riposo" onChange={(ev) => { const c = [...employees]; c[idx].riposo = ev.target.value; setEmployees(c); }} />
+                <input value={e.telefono || ''} placeholder="WhatsApp" onChange={(ev) => { const c = [...employees]; c[idx].telefono = ev.target.value; setEmployees(c); }} />
                 <button className="btn danger" onClick={() => setEmployees(employees.filter((_, i) => i !== idx))}>Elimina</button>
               </div>
             );
