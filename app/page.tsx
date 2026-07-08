@@ -145,7 +145,7 @@ export default function Page() {
       </header>
 
       <nav className="nav no-print">
-        {['dashboard', 'calendario', 'dipendenti', 'riepilogo', 'storico', 'magazzino', 'impostazioni'].map((t) => (
+        {['dashboard'].map((t) => (
           <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
             {t[0].toUpperCase() + t.slice(1)}
           </button>
@@ -171,21 +171,37 @@ export default function Page() {
           />
         )}
 
-        {tab === 'calendario' && (
-          <CalendarSection
-            weekInfo={weekInfo}
-            employees={employees}
-            schedule={schedule}
-            closed={closed}
-            dayRests={dayRests}
-            setWeekInfo={setWeekInfo}
-            setClosed={setClosed}
-            setDayRests={setDayRests}
-            addSelect={addSelect}
-            updateSelect={updateSelect}
-            removeSelect={removeSelect}
-          />
-        )}
+{tab === 'calendario' && (
+  <>
+    <div className="card no-print" style={{ marginBottom: 20 }}>
+      <div className="actions">
+        <button className="btn green" onClick={() => setTab('dashboard')}>⬅ Dashboard</button>
+        <button className="btn gold" onClick={() => setTab('dipendenti')}>👥 Dipendenti</button>
+        <button className="btn gold" onClick={() => setTab('riepilogo')}>📊 Riepilogo</button>
+        <button className="btn gold" onClick={() => setTab('storico')}>📚 Storico</button>
+        <button className="btn gold" onClick={() => setTab('whatsapp')}>📲 WhatsApp</button>
+        <button className="btn gold" onClick={saveTurno}>💾 Salva turno</button>
+        <button className="btn green" onClick={replicaSettimanaSuccessiva}>🔁 Replica settimana</button>
+        <button className="btn gold" onClick={() => exportPdf('collaboratori')}>PDF Collaboratori</button>
+        <button className="btn gold" onClick={() => exportPdf('direzione')}>PDF Direzione</button>
+      </div>
+    </div>
+
+    <CalendarSection
+      weekInfo={weekInfo}
+      employees={employees}
+      schedule={schedule}
+      closed={closed}
+      dayRests={dayRests}
+      setWeekInfo={setWeekInfo}
+      setClosed={setClosed}
+      setDayRests={setDayRests}
+      addSelect={addSelect}
+      updateSelect={updateSelect}
+      removeSelect={removeSelect}
+    />
+  </>
+)}
 
         {tab === 'dipendenti' && <EmployeesSection employees={employees} setEmployees={setEmployees} />}
 

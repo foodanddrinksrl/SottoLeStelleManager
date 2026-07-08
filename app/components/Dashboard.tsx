@@ -3,28 +3,12 @@ export function Dashboard({
   employeeCount,
   week,
   onOpenCalendar,
-  onOpenEmployees,
-  onOpenHistory,
-  onOpenSummary,
-  onOpenWhatsApp,
-  onSaveTurno,
-  onReplicaSettimana,
-  onPdfCollaboratori,
-  onPdfDirezione,
   onOpenMagazzino,
 }: {
   totals: any;
   employeeCount: number;
   week: number;
   onOpenCalendar: () => void;
-  onOpenEmployees: () => void;
-  onOpenHistory: () => void;
-  onOpenSummary: () => void;
-  onOpenWhatsApp: () => void;
-  onSaveTurno: () => void;
-  onReplicaSettimana: () => void;
-  onPdfCollaboratori: () => void;
-  onPdfDirezione: () => void;
   onOpenMagazzino: () => void;
 }) {
   return (
@@ -37,33 +21,17 @@ export function Dashboard({
       </div>
 
       <div className="quick-grid">
-        <div className="card module-card">
+        <button className="card module-card module-button" onClick={onOpenCalendar}>
           <h2>👥 Risorse Umane</h2>
-          <p className="muted">Turni, collaboratori, storico, WhatsApp e PDF.</p>
+          <p className="muted">Turni, dipendenti, riepilogo costi, storico e WhatsApp.</p>
+          <strong>Apri modulo →</strong>
+        </button>
 
-          <div className="actions">
-            <button className="btn green" onClick={onOpenCalendar}>📅 Calendario</button>
-            <button className="btn" onClick={onOpenEmployees}>👥 Dipendenti</button>
-            <button className="btn" onClick={onOpenSummary}>📊 Riepilogo</button>
-            <button className="btn" onClick={onOpenHistory}>📚 Storico</button>
-            <button className="btn" onClick={onOpenWhatsApp}>📲 WhatsApp</button>
-            <button className="btn light" onClick={onSaveTurno}>Salva turno</button>
-            <button className="btn green" onClick={onReplicaSettimana}>Replica settimana successiva</button>
-            <button className="btn light" onClick={onPdfCollaboratori}>PDF Collaboratori</button>
-            <button className="btn gold" onClick={onPdfDirezione}>PDF Direzione</button>
-          </div>
-        </div>
-
-        <div className="card module-card">
+        <button className="card module-card module-button" onClick={onOpenMagazzino}>
           <h2>📦 Magazzino</h2>
           <p className="muted">Prodotti, carico merce, scorte e ordini fornitori.</p>
-
-          <div className="actions">
-            <button className="btn gold" onClick={onOpenMagazzino}>📦 Apri magazzino</button>
-            <button className="btn" onClick={onOpenMagazzino}>📥 Carica merce</button>
-            <button className="btn" onClick={onOpenMagazzino}>🚚 Ordini fornitori</button>
-          </div>
-        </div>
+          <strong>Apri modulo →</strong>
+        </button>
       </div>
     </section>
   );

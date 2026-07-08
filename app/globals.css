@@ -432,4 +432,33 @@ input {
 .closed {
   padding: 6px !important;
   font-size: 12px !important;
+}.module-button {
+  color: #fff !important;
+  text-align: left;
+  cursor: pointer;
+  min-height: 150px;
+}
+
+.module-button h2,
+.module-button p,
+.module-button strong {
+  color: #fff !important;
+}
+
+.module-button strong {
+  display: block;
+  margin-top: 18px;
+  color: #d4aa23 !important;
+}
+
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 18px;
+}
+
+@media (max-width: 800px) {
+  .quick-grid {
+    grid-template-columns: 1fr;
+  }
 }
