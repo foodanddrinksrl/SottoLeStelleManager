@@ -1,15 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarSection } from './components/CalendarSection';
 import { Dashboard } from './components/Dashboard';
+import { CalendarSection } from './components/CalendarSection';
 import { EmployeesSection } from './components/EmployeesSection';
 import { HistorySection } from './components/HistorySection';
-import { Navigation } from './components/Navigation';
+import { MagazzinoSection } from './components/MagazzinoSection';
 import { SettingsSection } from './components/SettingsSection';
 import { Summary } from './components/Summary';
-import { TopBar } from './components/TopBar';
-import { WhatsAppSection } from './components/WhatsAppSection';
 import {
   addDays,
   calculateSummary,
@@ -18,16 +16,13 @@ import {
   defaultDayRests,
   defaultEmployees,
   defaultSchedule,
-  k,
-  makeWeekInfo,
   itDate,
+  makeWeekInfo,
+  k,
 } from './lib/schedule';
 import type { Dipendente, Reparto, Snapshot, WeekInfo } from './types';
 
 export default function Page() {
-  const [logged, setLogged] = useState(false);
-  const [user, setUser] = useState('Luigi');
-  const [pass, setPass] = useState('');
   const [tab, setTab] = useState('dashboard');
   const [employees, setEmployees] = useState<Dipendente[]>(defaultEmployees);
   const [schedule, setSchedule] = useState<Record<string, string[]>>(defaultSchedule);
@@ -46,7 +41,6 @@ export default function Page() {
       }
     };
 
-    setLogged(localStorage.getItem('slm_v3_logged') === '1');
     setEmployees(load('slm_v3_employees', defaultEmployees));
     setSchedule(load('slm_v3_schedule', defaultSchedule));
     setClosed(load('slm_v3_closed', defaultClosed));
@@ -64,39 +58,12 @@ export default function Page() {
     localStorage.setItem('slm_v3_history', JSON.stringify(history));
   }, [employees, schedule, closed, dayRests, weekInfo, history]);
 
-  const summary = useMemo(() => calculateSummary(schedule, closed, employees), [schedule, closed, employees]);
-  const totals = useMemo(() => calculateTotals(summary), [summary]);
+  const summary = useMemo(
+    () => calculateSummary(schedule, closed, employees),
+    [schedule, closed, employees]
+  );
 
-  if (false && !logged) {
-    return (
-      <div className="login">
-        <div className="login-card">
-          <div className="brand">SLS</div>
-          <h1>Sotto le Stelle Manager</h1>
-          <p className="muted">Accesso Luigi / Roberta. Prossima fase: Supabase per login online.</p>
-          <select value={user} onChange={(e) => setUser(e.target.value)}>
-            <option>Luigi</option>
-            <option>Roberta</option>
-          </select>
-          <input type="password" placeholder="Password" value={pass} onChange={(e) => setPass(e.target.value)} />
-          <button
-            className="btn primary"
-            style={{ width: '100%', marginTop: 10 }}
-            onClick={() => {
-              if (pass.length >= 3) {
-                localStorage.setItem('slm_v3_logged', '1');
-                setLogged(true);
-              } else {
-                alert('Inserisci una password di almeno 3 caratteri.');
-              }
-            }}
-          >
-            Entra
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const totals = useMemo(() => calculateTotals(summary), [summary]);
 
   function addSelect(g: string, t: string, r: Reparto) {
     setSchedule((s) => ({ ...s, [k(g, t, r)]: [...(s[k(g, t, r)] || []), ''] }));
@@ -119,7 +86,16 @@ export default function Page() {
   }
 
   function saveTurno() {
-    const snap = { id: Date.now(), savedAt: new Date().toLocaleString('it-IT'), weekInfo, employees, schedule, closed, dayRests };
+    const snap = {
+      id: Date.now(),
+      savedAt: new Date().toLocaleString('it-IT'),
+      weekInfo,
+      employees,
+      schedule,
+      closed,
+      dayRests,
+    };
+
     setHistory((h) => {
       const idx = h.findIndex((x) => x.weekInfo.start === weekInfo.start);
       if (idx >= 0) {
@@ -129,6 +105,7 @@ export default function Page() {
       }
       return [snap, ...h];
     });
+
     alert('Turno salvato nello storico.');
   }
 
@@ -158,21 +135,22 @@ export default function Page() {
 
   return (
     <div>
-      <TopBar
-        user={user}
-        weekInfo={weekInfo}
-        onSave={saveTurno}
-        onReplica={replicaSettimanaSuccessiva}
-        onExportCollaboratori={() => exportPdf('collaboratori')}
-        onExportDirezione={() => exportPdf('direzione')}
-        onWhatsapp={() => setTab('whatsapp')}
-        onLogout={() => {
-          localStorage.removeItem('slm_v3_logged');
-          setLogged(false);
-        }}
-      />
+      <header className="topbar">
+        <div>
+          <h1>🍕 Sotto le Stelle Manager</h1>
+          <p>
+            Luigi · Settimana {weekInfo.week} · dal {itDate(weekInfo.start)} al {itDate(weekInfo.end)}
+          </p>
+        </div>
+      </header>
 
-      <Navigation tab={tab} onChange={setTab} />
+      <nav className="nav no-print">
+        {['dashboard', 'calendario', 'dipendenti', 'riepilogo', 'storico', 'magazzino', 'impostazioni'].map((t) => (
+          <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
+            {t[0].toUpperCase() + t.slice(1)}
+          </button>
+        ))}
+      </nav>
 
       <main className="container">
         {tab === 'dashboard' && (
@@ -182,7 +160,14 @@ export default function Page() {
             week={weekInfo.week}
             onOpenCalendar={() => setTab('calendario')}
             onOpenEmployees={() => setTab('dipendenti')}
+            onOpenSummary={() => setTab('riepilogo')}
             onOpenHistory={() => setTab('storico')}
+            onOpenWhatsApp={() => setTab('whatsapp')}
+            onSaveTurno={saveTurno}
+            onReplicaSettimana={replicaSettimanaSuccessiva}
+            onPdfCollaboratori={() => exportPdf('collaboratori')}
+            onPdfDirezione={() => exportPdf('direzione')}
+            onOpenMagazzino={() => setTab('magazzino')}
           />
         )}
 
@@ -206,11 +191,11 @@ export default function Page() {
 
         {tab === 'riepilogo' && <Summary summary={summary} totals={totals} />}
 
-        {tab === 'storico' && <HistorySection history={history} setHistory={setHistory} openSnapshot={openSnapshot} />}
-
-        {tab === 'whatsapp' && (
-          <WhatsAppSection employees={employees} schedule={schedule} closed={closed} weekInfo={weekInfo} />
+        {tab === 'storico' && (
+          <HistorySection history={history} setHistory={setHistory} openSnapshot={openSnapshot} />
         )}
+
+        {tab === 'magazzino' && <MagazzinoSection />}
 
         {tab === 'impostazioni' && <SettingsSection />}
 
