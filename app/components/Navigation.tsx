@@ -1,4 +1,4 @@
-const tabs = ['dashboard', 'calendario', 'dipendenti', 'riepilogo', 'storico', 'whatsapp', 'impostazioni'];
+const tabs = ['dashboard', 'calendario', 'dipendenti', 'riepilogo', 'storico', 'whatsapp', 'magazzino', 'impostazioni'];
 
 export function Navigation({ tab, onChange }: { tab: string; onChange: (tab: string) => void }) {
   return (
