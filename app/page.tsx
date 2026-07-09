@@ -58,11 +58,7 @@ export default function Page() {
     localStorage.setItem('slm_v3_history', JSON.stringify(history));
   }, [employees, schedule, closed, dayRests, weekInfo, history]);
 
-  const summary = useMemo(
-    () => calculateSummary(schedule, closed, employees),
-    [schedule, closed, employees]
-  );
-
+  const summary = useMemo(() => calculateSummary(schedule, closed, employees), [schedule, closed, employees]);
   const totals = useMemo(() => calculateTotals(summary), [summary]);
 
   function addSelect(g: string, t: string, r: Reparto) {
@@ -159,49 +155,42 @@ export default function Page() {
             employeeCount={employees.length}
             week={weekInfo.week}
             onOpenCalendar={() => setTab('calendario')}
-            onOpenEmployees={() => setTab('dipendenti')}
-            onOpenSummary={() => setTab('riepilogo')}
-            onOpenHistory={() => setTab('storico')}
-            onOpenWhatsApp={() => setTab('whatsapp')}
-            onSaveTurno={saveTurno}
-            onReplicaSettimana={replicaSettimanaSuccessiva}
-            onPdfCollaboratori={() => exportPdf('collaboratori')}
-            onPdfDirezione={() => exportPdf('direzione')}
             onOpenMagazzino={() => setTab('magazzino')}
+            onOpenBilancio={() => setTab('bilancio')}
           />
         )}
 
-{tab === 'calendario' && (
-  <>
-    <div className="card no-print" style={{ marginBottom: 20 }}>
-      <div className="actions">
-        <button className="btn green" onClick={() => setTab('dashboard')}>⬅ Dashboard</button>
-        <button className="btn gold" onClick={() => setTab('dipendenti')}>👥 Dipendenti</button>
-        <button className="btn gold" onClick={() => setTab('riepilogo')}>📊 Riepilogo</button>
-        <button className="btn gold" onClick={() => setTab('storico')}>📚 Storico</button>
-        <button className="btn gold" onClick={() => setTab('whatsapp')}>📲 WhatsApp</button>
-        <button className="btn gold" onClick={saveTurno}>💾 Salva turno</button>
-        <button className="btn green" onClick={replicaSettimanaSuccessiva}>🔁 Replica settimana</button>
-        <button className="btn gold" onClick={() => exportPdf('collaboratori')}>PDF Collaboratori</button>
-        <button className="btn gold" onClick={() => exportPdf('direzione')}>PDF Direzione</button>
-      </div>
-    </div>
+        {tab === 'calendario' && (
+          <>
+            <div className="card no-print" style={{ marginBottom: 20 }}>
+              <div className="actions">
+                <button className="btn green" onClick={() => setTab('dashboard')}>⬅ Dashboard</button>
+                <button className="btn gold" onClick={() => setTab('dipendenti')}>👥 Dipendenti</button>
+                <button className="btn gold" onClick={() => setTab('riepilogo')}>📊 Riepilogo</button>
+                <button className="btn gold" onClick={() => setTab('storico')}>📚 Storico</button>
+                <button className="btn gold" onClick={() => setTab('whatsapp')}>📲 WhatsApp</button>
+                <button className="btn gold" onClick={saveTurno}>💾 Salva turno</button>
+                <button className="btn green" onClick={replicaSettimanaSuccessiva}>🔁 Replica settimana</button>
+                <button className="btn gold" onClick={() => exportPdf('collaboratori')}>PDF Collaboratori</button>
+                <button className="btn gold" onClick={() => exportPdf('direzione')}>PDF Direzione</button>
+              </div>
+            </div>
 
-    <CalendarSection
-      weekInfo={weekInfo}
-      employees={employees}
-      schedule={schedule}
-      closed={closed}
-      dayRests={dayRests}
-      setWeekInfo={setWeekInfo}
-      setClosed={setClosed}
-      setDayRests={setDayRests}
-      addSelect={addSelect}
-      updateSelect={updateSelect}
-      removeSelect={removeSelect}
-    />
-  </>
-)}
+            <CalendarSection
+              weekInfo={weekInfo}
+              employees={employees}
+              schedule={schedule}
+              closed={closed}
+              dayRests={dayRests}
+              setWeekInfo={setWeekInfo}
+              setClosed={setClosed}
+              setDayRests={setDayRests}
+              addSelect={addSelect}
+              updateSelect={updateSelect}
+              removeSelect={removeSelect}
+            />
+          </>
+        )}
 
         {tab === 'dipendenti' && <EmployeesSection employees={employees} setEmployees={setEmployees} />}
 
@@ -212,6 +201,22 @@ export default function Page() {
         )}
 
         {tab === 'magazzino' && <MagazzinoSection />}
+
+        {tab === 'bilancio' && (
+          <section>
+            <div className="card">
+              <h2>📊 Controllo di Gestione</h2>
+              <p className="muted">Bilancio gestionale, KPI, costi, incassi e margini.</p>
+            </div>
+
+            <div className="card">
+              <h2>In costruzione</h2>
+              <p className="muted">
+                Qui inseriremo materie prime, personale, costi fissi, utile stimato e magazzino valorizzato.
+              </p>
+            </div>
+          </section>
+        )}
 
         {tab === 'impostazioni' && <SettingsSection />}
 
