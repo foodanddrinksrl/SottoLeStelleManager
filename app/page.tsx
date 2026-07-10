@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Dashboard } from './components/Dashboard';
+import { ControlloGestioneSection } from './components/ControlloGestioneSection';
 import { CalendarSection } from './components/CalendarSection';
 import { EmployeesSection } from './components/EmployeesSection';
 import { HistorySection } from './components/HistorySection';
@@ -200,23 +201,7 @@ export default function Page() {
           <HistorySection history={history} setHistory={setHistory} openSnapshot={openSnapshot} />
         )}
 
-        {tab === 'magazzino' && <MagazzinoSection />}
-
-        {tab === 'bilancio' && (
-          <section>
-            <div className="card">
-              <h2>📊 Controllo di Gestione</h2>
-              <p className="muted">Bilancio gestionale, KPI, costi, incassi e margini.</p>
-            </div>
-
-            <div className="card">
-              <h2>In costruzione</h2>
-              <p className="muted">
-                Qui inseriremo materie prime, personale, costi fissi, utile stimato e magazzino valorizzato.
-              </p>
-            </div>
-          </section>
-        )}
+        {tab === 'bilancio' && <ControlloGestioneSection />}
 
         {tab === 'impostazioni' && <SettingsSection />}
 
