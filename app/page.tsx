@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+
 import { Dashboard } from './components/Dashboard';
 import { ControlloGestioneSection } from './components/ControlloGestioneSection';
 import { CalendarSection } from './components/CalendarSection';
@@ -9,6 +10,8 @@ import { HistorySection } from './components/HistorySection';
 import { MagazzinoSection } from './components/MagazzinoSection';
 import { SettingsSection } from './components/SettingsSection';
 import { Summary } from './components/Summary';
+import { TopNavigation } from './components/TopNavigation';
+
 import {
   addDays,
   calculateSummary,
@@ -21,8 +24,13 @@ import {
   makeWeekInfo,
   k,
 } from './lib/schedule';
-import type { Dipendente, Reparto, Snapshot, WeekInfo } from './types';
 
+import type {
+  Dipendente,
+  Reparto,
+  Snapshot,
+  WeekInfo,
+} from './types';
 export default function Page() {
   const [tab, setTab] = useState('dashboard');
   const [employees, setEmployees] = useState<Dipendente[]>(defaultEmployees);
@@ -141,13 +149,12 @@ export default function Page() {
         </div>
       </header>
 
-      <nav className="nav no-print">
-        {['dashboard'].map((t) => (
-          <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
-            {t[0].toUpperCase() + t.slice(1)}
-          </button>
-        ))}
-      </nav>
+      <TopNavigation
+  activeTab={tab}
+  onDashboard={() => setTab('dashboard')}
+  onRisorseUmane={() => setTab('calendario')}
+  onBilancioGestionale={() => setTab('bilancio')}
+/>
 
       <main className="container">
         {tab === 'dashboard' && (
