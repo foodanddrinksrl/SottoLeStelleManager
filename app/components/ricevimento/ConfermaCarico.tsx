@@ -7,10 +7,8 @@ import type {
 
 type ConfermaCaricoProps = {
   documento: DocumentoRicevimento;
-
   onIndietro: () => void;
   onConferma: () => void;
-
   salvataggioInCorso?: boolean;
 };
 
@@ -31,11 +29,14 @@ function dataIt(value: string): string {
 }
 
 function calcolaTotaleRiga(riga: RigaRicevimento): number {
-  if (riga.totaleRiga > 0) {
-    return riga.totaleRiga;
+  if (Number(riga.totaleRiga || 0) > 0) {
+    return Number(riga.totaleRiga || 0);
   }
 
-  return riga.quantita * riga.prezzoUnitario;
+  return (
+    Number(riga.quantita || 0) *
+    Number(riga.prezzoUnitario || 0)
+  );
 }
 
 export function ConfermaCarico({
@@ -56,13 +57,25 @@ export function ConfermaCarico({
     (riga) => riga.categoria === 'Da classificare'
   );
 
-  const valoreCarico = righeMagazzino.reduce(
+  const valoreRigheMagazzino = righeMagazzino.reduce(
     (somma, riga) => somma + calcolaTotaleRiga(riga),
     0
   );
 
+  const totaleDocumento = Number(
+    documento.totaleDocumento || 0
+  );
+
+  const usaTotaleDocumento =
+    valoreRigheMagazzino <= 0 && totaleDocumento > 0;
+
+  const valoreCarico = usaTotaleDocumento
+    ? totaleDocumento
+    : valoreRigheMagazzino;
+
   const totaleQuantita = righeMagazzino.reduce(
-    (somma, riga) => somma + Number(riga.quantita || 0),
+    (somma, riga) =>
+      somma + Number(riga.quantita || 0),
     0
   );
 
@@ -101,7 +114,7 @@ export function ConfermaCarico({
 
         <div className="kpi gold">
           <span>💰 Totale documento</span>
-          <strong>{euro(documento.totaleDocumento)}</strong>
+          <strong>{euro(totaleDocumento)}</strong>
         </div>
       </div>
 
@@ -126,6 +139,24 @@ export function ConfermaCarico({
           <strong>{righeEscluse.length}</strong>
         </div>
       </div>
+
+      {usaTotaleDocumento && (
+        <div className="card">
+          <h2>ℹ️ Totale non ripartito per articolo</h2>
+
+          <p>
+            La bolla indica un totale complessivo di{' '}
+            <strong>{euro(totaleDocumento)}</strong>, ma non
+            riporta i prezzi dei singoli prodotti.
+          </p>
+
+          <p className="muted">
+            Il gestionale registra correttamente il valore
+            complessivo dell’acquisto senza inventare prezzi
+            unitari.
+          </p>
+        </div>
+      )}
 
       {righeDaClassificare.length > 0 && (
         <div className="card">
@@ -181,21 +212,27 @@ export function ConfermaCarico({
                     </td>
 
                     <td>{riga.categoria}</td>
-
                     <td>{riga.quantita}</td>
-
                     <td>{riga.unitaMisura || '—'}</td>
 
-                    <td>{euro(riga.prezzoUnitario)}</td>
+                    <td>
+                      {Number(riga.prezzoUnitario || 0) > 0
+                        ? euro(riga.prezzoUnitario)
+                        : 'Da definire'}
+                    </td>
 
                     <td>
                       <strong>
-                        {euro(calcolaTotaleRiga(riga))}
+                        {calcolaTotaleRiga(riga) > 0
+                          ? euro(calcolaTotaleRiga(riga))
+                          : 'Da definire'}
                       </strong>
                     </td>
 
                     <td>
-                      {riga.ultimoPrezzo <= 0 ? (
+                      {Number(riga.prezzoUnitario || 0) <= 0 ? (
+                        <span>Prezzo non disponibile</span>
+                      ) : riga.ultimoPrezzo <= 0 ? (
                         <span>Primo acquisto</span>
                       ) : riga.variazionePercentuale > 10 ? (
                         <span>
@@ -257,7 +294,11 @@ export function ConfermaCarico({
                 {riga.quantita} {riga.unitaMisura}
               </span>
 
-              <span>{euro(calcolaTotaleRiga(riga))}</span>
+              <span>
+                {calcolaTotaleRiga(riga) > 0
+                  ? euro(calcolaTotaleRiga(riga))
+                  : 'Da definire'}
+              </span>
             </div>
           ))}
         </div>
@@ -272,21 +313,21 @@ export function ConfermaCarico({
           <div className="card">
             <strong>📦 Caricare il magazzino</strong>
             <p className="muted">
-              Quantità e valore degli articoli selezionati.
+              Quantità degli articoli selezionati.
             </p>
           </div>
 
           <div className="card">
             <strong>📥 Registrare l’acquisto</strong>
             <p className="muted">
-              Fornitore, documento, righe e importi.
+              Fornitore, documento, righe e importo totale.
             </p>
           </div>
 
           <div className="card">
             <strong>🏪 Aggiornare il fornitore</strong>
             <p className="muted">
-              Articoli acquistati e ultimi prezzi.
+              Articoli acquistati e prezzi quando disponibili.
             </p>
           </div>
 

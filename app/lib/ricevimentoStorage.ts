@@ -109,6 +109,31 @@ function normalizzaTesto(value: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+function calcolaValoreRighe(
+  righe: Array<{
+    quantita: number;
+    prezzoUnitario: number;
+    totaleRiga: number;
+    aggiornaMagazzino: boolean;
+  }>
+): number {
+  return righe
+    .filter((riga) => riga.aggiornaMagazzino)
+    .reduce((somma, riga) => {
+      const totaleRiga = Number(riga.totaleRiga || 0);
+
+      if (totaleRiga > 0) {
+        return somma + totaleRiga;
+      }
+
+      return (
+        somma +
+        Number(riga.quantita || 0) *
+          Number(riga.prezzoUnitario || 0)
+      );
+    }, 0);
+}
+
 export function creaChiaveDuplicatoBolla({
   fornitore,
   numeroDocumento,
@@ -380,9 +405,21 @@ export function eliminaRicevimento(
 }
 
 export function totaleCarichiMagazzino(): number {
-  return caricaMovimentiMagazzino().reduce(
-    (somma, movimento) =>
-      somma + movimento.valoreTotale,
+  return caricaBolleRicevimento().reduce(
+    (somma, bolla) => {
+      const valoreRighe = calcolaValoreRighe(
+        bolla.righe
+      );
+
+      const valoreRicevimento =
+        valoreRighe > 0
+          ? valoreRighe
+          : Number(
+              bolla.totaleDocumento || 0
+            );
+
+      return somma + valoreRicevimento;
+    },
     0
   );
 }

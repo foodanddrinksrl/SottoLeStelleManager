@@ -36,12 +36,14 @@ import {
 } from '../lib/fornitoriStorage';
 
 import { RicevimentoMerci } from './ricevimento/RicevimentoMerci';
+import { StoricoRicevimenti } from './ricevimento/StoricoRicevimenti';
 
 type Categoria = CategoriaGestionale;
 
 type SezioneCentroAcquisti =
   | 'fatture'
   | 'ricevimento'
+  | 'storico-ricevimenti'
   | 'fornitori'
   | 'prezzi'
   | 'pagamenti'
@@ -545,6 +547,7 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
     }> = [
       { id: 'fatture', etichetta: '📄 Fatture XML' },
       { id: 'ricevimento', etichetta: '📦 Ricevimento Merci' },
+      { id: 'storico-ricevimenti', etichetta: '📚 Storico Ricevimenti' },
       { id: 'fornitori', etichetta: '🏪 Fornitori' },
       { id: 'prezzi', etichetta: '📈 Prezzi' },
       { id: 'pagamenti', etichetta: '💳 Pagamenti' },
@@ -573,6 +576,17 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
       <section>
         {menuCentroAcquisti()}
         <RicevimentoMerci onBack={() => setSezione('fatture')} />
+      </section>
+    );
+  }
+
+  if (sezione === 'storico-ricevimenti') {
+    return (
+      <section>
+        {menuCentroAcquisti()}
+        <StoricoRicevimenti
+          onBack={() => setSezione('fatture')}
+        />
       </section>
     );
   }
