@@ -59,13 +59,25 @@ export function CalendarSection({
           <div className="day" key={g}>
             <h3>{g}</h3>
 
-            <div className="rest no-print">
-              <input
-                value={dayRests[g] || ''}
-                onChange={(e) => setDayRests({ ...dayRests, [g]: e.target.value })}
-                placeholder="Riposo"
-              />
-            </div>
+            <div className="rest">
+  <input
+    className="no-print"
+    value={dayRests[g] || ''}
+    onChange={(e) =>
+      setDayRests({
+        ...dayRests,
+        [g]: e.target.value,
+      })
+    }
+    placeholder="Riposo"
+  />
+
+  <div className="print-only">
+    <strong>Riposo:</strong>
+    <br />
+    {dayRests[g]?.trim() || 'Nessuno'}
+  </div>
+</div>
 
             {['Pranzo', 'Cena'].map((t) => (
               <div className="shift" key={t}>

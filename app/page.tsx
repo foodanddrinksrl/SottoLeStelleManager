@@ -1,17 +1,23 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { Dashboard } from './components/Dashboard';
 import { ControlloGestioneSection } from './components/ControlloGestioneSection';
 import { CalendarSection } from './components/CalendarSection';
 import { EmployeesSection } from './components/EmployeesSection';
+import { IncassiBaccoSection } from './components/IncassiBaccoSection';
 import { HistorySection } from './components/HistorySection';
 import { MagazzinoSection } from './components/MagazzinoSection';
 import { SettingsSection } from './components/SettingsSection';
 import { Summary } from './components/Summary';
 import { TopNavigation } from './components/TopNavigation';
-
+import { PdfCollaboratori } from './components/PdfCollaboratori';
 import {
   addDays,
   calculateSummary,
@@ -31,15 +37,72 @@ import type {
   Snapshot,
   WeekInfo,
 } from './types';
+type ModalitaPeriodoDashboard =
+  | 'settimana'
+  | 'mese'
+  | 'personalizzato';
+
+type PeriodoDashboard = {
+  modalita: ModalitaPeriodoDashboard;
+  dataDa: string;
+  dataA: string;
+};
+
+function dataIsoLocale(data: Date): string {
+  const anno = data.getFullYear();
+  const mese = String(data.getMonth() + 1).padStart(2, '0');
+  const giorno = String(data.getDate()).padStart(2, '0');
+
+  return `${anno}-${mese}-${giorno}`;
+}
+
+function periodoSettimanaAttuale(): PeriodoDashboard {
+  const oggi = new Date();
+
+  const giornoSettimana = oggi.getDay();
+  const giorniDaLunedi =
+    giornoSettimana === 0 ? 6 : giornoSettimana - 1;
+
+  const lunedi = new Date(oggi);
+  lunedi.setDate(oggi.getDate() - giorniDaLunedi);
+
+  const domenica = new Date(lunedi);
+  domenica.setDate(lunedi.getDate() + 6);
+
+  return {
+    modalita: 'settimana',
+    dataDa: dataIsoLocale(lunedi),
+    dataA: dataIsoLocale(domenica),
+  };
+}
 export default function Page() {
   const [tab, setTab] = useState('dashboard');
+  const [dashboardView, setDashboardView] = useState<
+  | 'home'
+  | 'incassi'
+  | 'materie'
+  | 'personale'
+  | 'consumi'
+  | 'costi'
+  | 'utile'
+>('home');
+const [periodoDashboard, setPeriodoDashboard] =
+  useState<PeriodoDashboard>(
+    periodoSettimanaAttuale()
+  );
   const [employees, setEmployees] = useState<Dipendente[]>(defaultEmployees);
   const [schedule, setSchedule] = useState<Record<string, string[]>>(defaultSchedule);
   const [closed, setClosed] = useState<Record<string, boolean>>(defaultClosed);
   const [dayRests, setDayRests] = useState<Record<string, string>>(defaultDayRests);
   const [weekInfo, setWeekInfo] = useState<WeekInfo>(makeWeekInfo());
   const [history, setHistory] = useState<Snapshot[]>([]);
+  const [storageLoaded, setStorageLoaded] = useState(false);
   const [printMode, setPrintMode] = useState<'collaboratori' | 'direzione'>('collaboratori');
+  const pdfContainerRef =
+  useRef<HTMLDivElement | null>(null);
+
+const [pdfLoading, setPdfLoading] =
+  useState(false);
 
   useEffect(() => {
     const load = (key: string, fallback: any) => {
@@ -56,16 +119,18 @@ export default function Page() {
     setDayRests(load('slm_v3_rests', defaultDayRests));
     setWeekInfo(load('slm_v3_week', makeWeekInfo()));
     setHistory(load('slm_v3_history', []));
+    setStorageLoaded(true);
   }, []);
 
   useEffect(() => {
+    if (!storageLoaded) return;
     localStorage.setItem('slm_v3_employees', JSON.stringify(employees));
     localStorage.setItem('slm_v3_schedule', JSON.stringify(schedule));
     localStorage.setItem('slm_v3_closed', JSON.stringify(closed));
     localStorage.setItem('slm_v3_rests', JSON.stringify(dayRests));
     localStorage.setItem('slm_v3_week', JSON.stringify(weekInfo));
     localStorage.setItem('slm_v3_history', JSON.stringify(history));
-  }, [employees, schedule, closed, dayRests, weekInfo, history]);
+  }, [storageLoaded,employees, schedule, closed, dayRests, weekInfo, history]);
 
   const summary = useMemo(() => calculateSummary(schedule, closed, employees), [schedule, closed, employees]);
   const totals = useMemo(() => calculateTotals(summary), [summary]);
@@ -123,12 +188,180 @@ export default function Page() {
     setTab('calendario');
     alert('Settimana replicata alla settimana successiva.');
   }
+async function creaPdfCollaboratori(): Promise<File> {
+  const contenitore = pdfContainerRef.current;
 
-  function exportPdf(mode: 'collaboratori' | 'direzione') {
-    setPrintMode(mode);
-    setTimeout(() => window.print(), 150);
+  if (!contenitore) {
+    throw new Error(
+      'Area PDF collaboratori non disponibile.'
+    );
   }
 
+  const [{ default: html2canvas }, { jsPDF }] =
+    await Promise.all([
+      import('html2canvas'),
+      import('jspdf'),
+    ]);
+
+  const canvas = await html2canvas(contenitore, {
+    scale: 2,
+    backgroundColor: '#ffffff',
+    useCORS: true,
+    logging: false,
+  });
+
+  const pdf = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4',
+    compress: true,
+  });
+
+  const larghezzaPagina =
+    pdf.internal.pageSize.getWidth();
+
+  const altezzaPagina =
+    pdf.internal.pageSize.getHeight();
+
+  const margine = 5;
+
+  const larghezzaDisponibile =
+    larghezzaPagina - margine * 2;
+
+  const altezzaDisponibile =
+    altezzaPagina - margine * 2;
+
+  const rapportoCanvas =
+    canvas.width / canvas.height;
+
+  let larghezzaImmagine =
+    larghezzaDisponibile;
+
+  let altezzaImmagine =
+    larghezzaImmagine / rapportoCanvas;
+
+  if (altezzaImmagine > altezzaDisponibile) {
+    altezzaImmagine = altezzaDisponibile;
+
+    larghezzaImmagine =
+      altezzaImmagine * rapportoCanvas;
+  }
+
+  const posizioneX =
+    (larghezzaPagina - larghezzaImmagine) / 2;
+
+  const immagine = canvas.toDataURL(
+    'image/jpeg',
+    0.95
+  );
+
+  pdf.addImage(
+    immagine,
+    'JPEG',
+    posizioneX,
+    margine,
+    larghezzaImmagine,
+    altezzaImmagine
+  );
+
+  const blob = pdf.output('blob');
+
+  const nomeFile =
+    `Turni-Collaboratori-Settimana-${weekInfo.week}.pdf`;
+
+  return new File([blob], nomeFile, {
+    type: 'application/pdf',
+  });
+}
+
+async function scaricaPdfCollaboratori() {
+  try {
+    setPdfLoading(true);
+
+    const file = await creaPdfCollaboratori();
+
+    const url = URL.createObjectURL(file);
+
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = file.name;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    window.setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 1000);
+  } catch (errore) {
+    console.error(errore);
+
+    alert(
+      'Non è stato possibile creare il PDF.'
+    );
+  } finally {
+    setPdfLoading(false);
+  }
+}
+async function condividiPdfWhatsApp() {
+  try {
+    setPdfLoading(true);
+
+    const file = await creaPdfCollaboratori();
+
+    const datiCondivisione = {
+      title: `Turni collaboratori - Settimana ${weekInfo.week}`,
+      text:
+        `Turni collaboratori dal ` +
+        `${itDate(weekInfo.start)} al ` +
+        `${itDate(weekInfo.end)}`,
+      files: [file],
+    };
+
+    if (
+      navigator.share &&
+      (!navigator.canShare ||
+        navigator.canShare({ files: [file] }))
+    ) {
+      await navigator.share(datiCondivisione);
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = file.name;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    window.setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 1000);
+
+    alert(
+      'PDF scaricato. Ora puoi allegarlo su WhatsApp.'
+    );
+  } catch (errore) {
+    if (
+      errore instanceof DOMException &&
+      errore.name === 'AbortError'
+    ) {
+      return;
+    }
+
+    console.error(errore);
+
+    alert(
+      'Non è stato possibile condividere il PDF.'
+    );
+  } finally {
+    setPdfLoading(false);
+  }
+}
   function openSnapshot(snapshot: Snapshot) {
     setWeekInfo(snapshot.weekInfo);
     setEmployees(snapshot.employees);
@@ -157,17 +390,75 @@ export default function Page() {
 />
 
       <main className="container">
-        {tab === 'dashboard' && (
-          <Dashboard
-            totals={totals}
-            employeeCount={employees.length}
-            week={weekInfo.week}
-            onOpenCalendar={() => setTab('calendario')}
-            onOpenMagazzino={() => setTab('magazzino')}
-            onOpenBilancio={() => setTab('bilancio')}
-          />
-        )}
+        
+        {tab === 'dashboard' && dashboardView === 'home' && (
+  <Dashboard
+    totals={totals}
+    employeeCount={employees.length}
+    week={weekInfo.week}
+    periodoDashboard={periodoDashboard}
+setPeriodoDashboard={setPeriodoDashboard}
+    onOpenCalendar={() => setTab('calendario')}
+    onOpenMagazzino={() => setTab('magazzino')}
+    onOpenBilancio={() => setTab('bilancio')}
+    onOpenIncassi={() => setDashboardView('incassi')}
+    onOpenMateriePrime={() => setDashboardView('materie')}
+    onOpenPersonale={() => setDashboardView('personale')}
+    onOpenMaterialiConsumo={() =>
+      setDashboardView('consumi')
+    }
+    onOpenCostiFissi={() => setDashboardView('costi')}
+    onOpenUtile={() => setDashboardView('utile')}
+  />
+)}
+{tab === 'dashboard' && dashboardView === 'incassi' && (
+  <IncassiBaccoSection
+    onBack={() => setDashboardView('home')}
+  />
+)}
+{tab === 'dashboard' &&
+  dashboardView !== 'home' &&
+  dashboardView !== 'incassi' && (
+  <section>
+    <div className="card no-print">
+      <div className="actions">
+        <button
+          className="btn green"
+          onClick={() => setDashboardView('home')}
+        >
+          ← Centro Direzionale
+        </button>
+      </div>
+    </div>
 
+    <div className="card">
+      <h2>
+        {dashboardView === 'incassi' &&
+          '💰 Dettaglio Incassi'}
+
+        {dashboardView === 'materie' &&
+          '📦 Dettaglio Materie Prime'}
+
+        {dashboardView === 'personale' &&
+          '👥 Dettaglio Personale'}
+
+        {dashboardView === 'consumi' &&
+          '🧻 Dettaglio Materiale di Consumo'}
+
+        {dashboardView === 'costi' &&
+          '🏢 Dettaglio Costi Fissi'}
+
+        {dashboardView === 'utile' &&
+          '📈 Dettaglio Utile'}
+      </h2>
+
+      <p className="muted">
+        La sezione dettagliata verrà collegata nel passaggio
+        successivo.
+      </p>
+    </div>
+  </section>
+)}
         {tab === 'calendario' && (
           <>
             <div className="card no-print" style={{ marginBottom: 20 }}>
@@ -176,11 +467,41 @@ export default function Page() {
                 <button className="btn gold" onClick={() => setTab('dipendenti')}>👥 Dipendenti</button>
                 <button className="btn gold" onClick={() => setTab('riepilogo')}>📊 Riepilogo</button>
                 <button className="btn gold" onClick={() => setTab('storico')}>📚 Storico</button>
-                <button className="btn gold" onClick={() => setTab('whatsapp')}>📲 WhatsApp</button>
+                <button
+  type="button"
+  className="btn gold"
+  disabled={pdfLoading}
+  onClick={condividiPdfWhatsApp}
+>
+  {pdfLoading
+    ? '⏳ Preparazione...'
+    : '📲 WhatsApp'}
+</button>
                 <button className="btn gold" onClick={saveTurno}>💾 Salva turno</button>
                 <button className="btn green" onClick={replicaSettimanaSuccessiva}>🔁 Replica settimana</button>
-                <button className="btn gold" onClick={() => exportPdf('collaboratori')}>PDF Collaboratori</button>
-                <button className="btn gold" onClick={() => exportPdf('direzione')}>PDF Direzione</button>
+                <button
+  type="button"
+  className="btn gold"
+  disabled={pdfLoading}
+  onClick={scaricaPdfCollaboratori}
+>
+  {pdfLoading
+    ? '⏳ Creazione PDF...'
+    : 'PDF Collaboratori'}
+</button>
+                <button
+  type="button"
+  className="btn gold"
+  onClick={() => {
+    setPrintMode('direzione');
+
+    window.setTimeout(() => {
+      window.print();
+    }, 150);
+  }}
+>
+  PDF Direzione
+</button>
               </div>
             </div>
 
@@ -222,7 +543,19 @@ export default function Page() {
             <Summary summary={summary} totals={totals} />
           </div>
         )}
-      </main>
+            </main>
+
+      <div className="pdf-export-container">
+        <div ref={pdfContainerRef}>
+          <PdfCollaboratori
+            weekInfo={weekInfo}
+            employees={employees}
+            schedule={schedule}
+            closed={closed}
+            dayRests={dayRests}
+          />
+        </div>
+      </div>
     </div>
   );
 }

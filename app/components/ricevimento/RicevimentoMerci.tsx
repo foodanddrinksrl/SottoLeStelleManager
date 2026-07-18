@@ -7,9 +7,7 @@ import { AnteprimaDocumento } from './AnteprimaDocumento';
 import { LetturaAI } from './LetturaAI';
 import { ConfermaCarico } from './ConfermaCarico';
 
-import {
-  salvaRicevimentoCompleto,
-} from '../../lib/ricevimentoStorage';
+
 
 import type {
   DocumentoRicevimento,
@@ -525,56 +523,62 @@ export function RicevimentoMerci({
     setStato('da-verificare');
   }
 
-  async function confermaRicevimento() {
-    setSalvataggioInCorso(true);
-    setMessaggioFinale('');
+async function confermaRicevimento() {
+  setSalvataggioInCorso(true);
+  setMessaggioFinale('');
 
-    try {
-      const documentoConfermato: DocumentoRicevimento =
-        {
-          ...documento,
-          stato: 'confermato',
-          confermatoIl:
-            new Date().toLocaleString(
-              'it-IT'
-            ),
-          righe: documento.righe.map(
-            (riga) => ({
-              ...riga,
-              confermata: true,
-            })
-          ),
-        };
+  try {
+    const documentoConfermato: DocumentoRicevimento = {
+      ...documento,
+      stato: 'confermato',
+      confermatoIl: new Date().toLocaleString('it-IT'),
+      righe: documento.righe.map((riga) => ({
+        ...riga,
+        confermata: true,
+      })),
+    };
 
-      const esito =
-        salvaRicevimentoCompleto(
-          documentoConfermato
-        );
+    const risposta = await fetch('/api/ricevimenti', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(documentoConfermato),
+    });
 
-      if (esito.duplicato) {
-        throw new Error(
-          'Questa bolla risulta già registrata. Nessun nuovo movimento di magazzino è stato creato.'
-        );
-      }
+    const esito = (await risposta.json()) as {
+      ok: boolean;
+      duplicato?: boolean;
+      ricevimentoId?: string;
+      movimentiCreati?: number;
+      messaggio?: string;
+    };
 
-      setDocumento(documentoConfermato);
-
-      const numeroMovimenti =
-        esito.movimentiCreati.length;
-
-      setMessaggioFinale(
-        `Ricevimento merci registrato correttamente. Creati ${numeroMovimenti} movimenti di carico. La bolla è ora in attesa della fattura XML.`
+    if (!risposta.ok || !esito.ok) {
+      throw new Error(
+        esito.messaggio ||
+          'Errore durante il salvataggio del ricevimento.'
       );
-    } catch (error) {
-      setMessaggioFinale(
-        error instanceof Error
-          ? error.message
-          : 'Errore durante il salvataggio.'
-      );
-    } finally {
-      setSalvataggioInCorso(false);
     }
+
+    setDocumento(documentoConfermato);
+
+    const numeroMovimenti =
+      Number(esito.movimentiCreati || 0);
+
+    setMessaggioFinale(
+      `Ricevimento merci registrato correttamente nel database cloud. Creati ${numeroMovimenti} movimenti di carico. La bolla è ora in attesa della fattura XML.`
+    );
+  } catch (error) {
+    setMessaggioFinale(
+      error instanceof Error
+        ? error.message
+        : 'Errore durante il salvataggio.'
+    );
+  } finally {
+    setSalvataggioInCorso(false);
   }
+}
 
   function nuovoRicevimento() {
     eliminaDocumento();

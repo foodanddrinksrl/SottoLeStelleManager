@@ -511,3 +511,445 @@ input {
     grid-template-columns: 1fr;
   }
 }
+/* ==================================================
+   STAMPA PDF COLLABORATORI E DIREZIONE
+   ================================================== */
+
+@page {
+  size: A4 landscape;
+  margin: 7mm;
+}
+
+@media print {
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    color: #111111 !important;
+    font-family: Arial, sans-serif !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Nasconde tutti i comandi del gestionale */
+  .no-print,
+  .topbar,
+  .nav,
+  .actions,
+  button,
+  .small,
+  .add-person {
+    display: none !important;
+  }
+
+  /* Mostra solo gli elementi previsti nel PDF */
+  .print-only {
+    display: block !important;
+  }
+
+  .container {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Calendario su sette colonne */
+  .calendar {
+    display: grid !important;
+    grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+    gap: 3mm !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    align-items: stretch !important;
+  }
+
+  .day {
+    display: block !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background: #ffffff !important;
+    color: #111111 !important;
+    border: 1px solid #d8d1bd !important;
+    border-radius: 10px !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    box-shadow: 0 5px 12px rgba(0, 0, 0, 0.15) !important;
+  }
+
+  .day h3 {
+    margin: 0 !important;
+    padding: 7px 3px !important;
+    text-align: center !important;
+    font-size: 12px !important;
+    line-height: 1.1 !important;
+    background: #111111 !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 9px 9px 0 0 !important;
+  }
+
+  /* Riposo */
+  .rest {
+    display: block !important;
+    min-height: 28px !important;
+    margin: 0 !important;
+    padding: 6px !important;
+    background: #ffffff !important;
+    color: #111111 !important;
+    border-bottom: 1px solid #d8d1bd !important;
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+  }
+
+  /* Turni */
+  .shift {
+    display: block !important;
+    margin: 0 !important;
+    padding: 5px !important;
+    background: #ffffff !important;
+    color: #111111 !important;
+    border: none !important;
+    border-bottom: 1px solid #ece6d7 !important;
+    border-radius: 0 !important;
+  }
+
+  .shift-title {
+    display: block !important;
+    margin: 0 0 4px !important;
+    padding: 3px 0 !important;
+    background: transparent !important;
+    color: #111111 !important;
+    font-size: 9px !important;
+    line-height: 1.1 !important;
+  }
+
+  .shift-title span {
+    color: #111111 !important;
+    font-size: 9px !important;
+    font-weight: 700 !important;
+  }
+
+  .closed {
+    margin: 4px 0 !important;
+    padding: 13px 2px !important;
+    text-align: center !important;
+    background: #202020 !important;
+    color: #ffffff !important;
+    border-radius: 8px !important;
+    font-size: 10px !important;
+    font-weight: bold !important;
+  }
+
+  .reparti-grid {
+    display: block !important;
+  }
+
+  .reparto-card {
+    display: block !important;
+    margin: 4px 0 0 !important;
+    padding: 3px 0 !important;
+    background: #ffffff !important;
+    color: #111111 !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  .reparto-card strong {
+    display: block !important;
+    margin: 0 0 3px !important;
+    color: #b28b00 !important;
+    font-size: 9px !important;
+    line-height: 1.1 !important;
+  }
+
+  .select-row {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Trasforma le tendine in semplice testo stampato */
+  .select-row select {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 1px 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #111111 !important;
+    font-size: 9px !important;
+    line-height: 1.15 !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Titolo finale del PDF */
+  .print-only h1 {
+    margin: 12px 0 5px !important;
+    color: #111111 !important;
+    font-size: 23px !important;
+  }
+
+  .print-only p {
+    margin: 0 !important;
+    color: #333333 !important;
+    font-size: 12px !important;
+  }
+
+  /* Evita pagine bianche o seconde pagine inutili */
+  main,
+  section {
+    break-inside: avoid !important;
+  }
+}
+
+@media print {
+  .topbar,
+  .nav,
+  .no-print,
+  button {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+}
+/* ==================================================
+   V6 - GENERATORE PDF COLLABORATORI
+   ================================================== */
+
+.pdf-export-container {
+  position: fixed;
+  top: 0;
+  left: -20000px;
+  width: 1120px;
+  background: #fff;
+  z-index: -9999;
+  pointer-events: none;
+}
+
+.pdf-collaboratori {
+  width: 1120px;
+  min-height: 720px;
+  box-sizing: border-box;
+  padding: 22px;
+  background: #fff;
+  color: #111;
+  font-family: Arial, sans-serif;
+}
+
+.pdf-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.pdf-day {
+  min-width: 0;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #d9d3c3;
+  border-radius: 12px;
+  box-shadow: 0 8px 14px rgba(0, 0, 0, 0.12);
+}
+
+.pdf-day h3 {
+  margin: 0;
+  padding: 10px 4px;
+  background: #111;
+  color: #fff;
+  text-align: center;
+  font-size: 15px;
+  border-radius: 11px 11px 0 0;
+}
+
+.pdf-rest {
+  min-height: 44px;
+  padding: 8px;
+  border-bottom: 1px solid #ded8ca;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.pdf-rest strong,
+.pdf-rest span {
+  display: block;
+}
+
+.pdf-shift {
+  padding: 7px;
+  border-bottom: 1px solid #eee8db;
+}
+
+.pdf-closed {
+  margin: 5px 0;
+  padding: 14px 4px;
+  border-radius: 9px;
+  background: #202020;
+  color: #fff;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pdf-reparto {
+  margin: 5px 0 7px;
+}
+
+.pdf-reparto strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #af8700;
+  font-size: 11px;
+}
+
+.pdf-persona {
+  display: block;
+  padding: 1px 0;
+  color: #111;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.pdf-heading {
+  margin-top: 24px;
+}
+
+.pdf-heading h1 {
+  margin: 0 0 8px;
+  color: #111;
+  font-size: 29px;
+}
+
+.pdf-heading p {
+  margin: 0;
+  color: #333;
+  font-size: 14px;
+}
+/* ==================================================
+   V6 - GENERATORE PDF COLLABORATORI
+   ================================================== */
+
+.pdf-export-container {
+  position: fixed;
+  top: 0;
+  left: -20000px;
+  width: 1120px;
+  background: #ffffff;
+  z-index: -9999;
+  pointer-events: none;
+}
+
+.pdf-collaboratori {
+  width: 1120px;
+  min-height: 720px;
+  box-sizing: border-box;
+  padding: 22px;
+  background: #ffffff;
+  color: #111111;
+  font-family: Arial, sans-serif;
+}
+
+.pdf-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.pdf-day {
+  min-width: 0;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #d9d3c3;
+  border-radius: 12px;
+  box-shadow: 0 8px 14px rgba(0, 0, 0, 0.12);
+}
+
+.pdf-day h3 {
+  margin: 0;
+  padding: 10px 4px;
+  background: #111111;
+  color: #ffffff;
+  text-align: center;
+  font-size: 15px;
+  border-radius: 11px 11px 0 0;
+}
+
+.pdf-rest {
+  min-height: 44px;
+  padding: 8px;
+  border-bottom: 1px solid #ded8ca;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.pdf-rest strong,
+.pdf-rest span {
+  display: block;
+}
+
+.pdf-shift {
+  padding: 7px;
+  border-bottom: 1px solid #eee8db;
+}
+
+.pdf-closed {
+  margin: 5px 0;
+  padding: 14px 4px;
+  border-radius: 9px;
+  background: #202020;
+  color: #ffffff;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pdf-reparto {
+  margin: 5px 0 7px;
+}
+
+.pdf-reparto strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #af8700;
+  font-size: 11px;
+}
+
+.pdf-persona {
+  display: block;
+  padding: 1px 0;
+  color: #111111;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.pdf-heading {
+  margin-top: 24px;
+}
+
+.pdf-heading h1 {
+  margin: 0 0 8px;
+  color: #111111;
+  font-size: 29px;
+}
+
+.pdf-heading p {
+  margin: 0;
+  color: #333333;
+  font-size: 14px;
+}
