@@ -77,6 +77,22 @@ function periodoSettimanaAttuale(): PeriodoDashboard {
 }
 export default function Page() {
   const [tab, setTab] = useState('dashboard');
+  useEffect(() => {
+  const tabValide = [
+    'dashboard',
+    'calendario',
+    'dipendenti',
+    'riepilogo',
+    'storico',
+    'bilancio',
+    'impostazioni',
+    'magazzino',
+  ];
+
+  if (!tabValide.includes(tab)) {
+    setTab('calendario');
+  }
+}, [tab]);
   const [dashboardView, setDashboardView] = useState<
   | 'home'
   | 'incassi'
@@ -480,6 +496,7 @@ setPeriodoDashboard={setPeriodoDashboard}
                 <button className="btn gold" onClick={saveTurno}>💾 Salva turno</button>
                 <button className="btn green" onClick={replicaSettimanaSuccessiva}>🔁 Replica settimana</button>
                 <button
+ 
   type="button"
   className="btn gold"
   disabled={pdfLoading}
@@ -487,20 +504,20 @@ setPeriodoDashboard={setPeriodoDashboard}
 >
   {pdfLoading
     ? '⏳ Creazione PDF...'
-    : 'PDF Collaboratori'}
+    : '📥 SCARICA PDF COLLABORATORI'}
 </button>
                 <button
   type="button"
-  className="btn gold"
+  className="btn danger"
   onClick={() => {
     setPrintMode('direzione');
 
     window.setTimeout(() => {
       window.print();
-    }, 150);
+    }, 300);
   }}
 >
-  PDF Direzione
+  🖨 STAMPA REPORT DIREZIONE
 </button>
               </div>
             </div>
