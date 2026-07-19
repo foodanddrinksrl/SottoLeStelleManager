@@ -449,8 +449,7 @@ setPeriodoDashboard={setPeriodoDashboard}
 
     <div className="card">
       <h2>
-        {dashboardView === 'incassi' &&
-          '💰 Dettaglio Incassi'}
+        
 
         {dashboardView === 'materie' &&
           '📦 Dettaglio Materie Prime'}
