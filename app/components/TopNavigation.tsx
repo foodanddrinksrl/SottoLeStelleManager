@@ -5,6 +5,7 @@ type TopNavigationProps = {
   onDashboard: () => void;
   onRisorseUmane: () => void;
   onBilancioGestionale: () => void;
+  onMarketing: () => void;
 };
 
 export function TopNavigation({
@@ -12,6 +13,7 @@ export function TopNavigation({
   onDashboard,
   onRisorseUmane,
   onBilancioGestionale,
+  onMarketing,
 }: TopNavigationProps) {
   return (
     <nav className="nav no-print">
@@ -45,6 +47,12 @@ export function TopNavigation({
       >
         📊 Bilancio Gestionale
       </button>
+      <button
+  className={activeTab === 'marketing' ? 'active' : ''}
+  onClick={onMarketing}
+>
+  📣 Marketing
+</button>
     </nav>
   );
 }

@@ -17,6 +17,8 @@ import { MagazzinoSection } from './components/MagazzinoSection';
 import { SettingsSection } from './components/SettingsSection';
 import { Summary } from './components/Summary';
 import { TopNavigation } from './components/TopNavigation';
+import { WhatsAppSection } from './components/WhatsAppSection';
+import { MarketingSection } from './components/MarketingSection';
 import { PdfCollaboratori } from './components/PdfCollaboratori';
 import {
   addDays,
@@ -79,15 +81,17 @@ export default function Page() {
   const [tab, setTab] = useState('dashboard');
   useEffect(() => {
   const tabValide = [
-    'dashboard',
-    'calendario',
-    'dipendenti',
-    'riepilogo',
-    'storico',
-    'bilancio',
-    'impostazioni',
-    'magazzino',
-  ];
+  'dashboard',
+  'calendario',
+  'dipendenti',
+  'riepilogo',
+  'storico',
+  'whatsapp-turni',
+  'marketing',
+  'bilancio',
+  'impostazioni',
+  'magazzino',
+];
 
   if (!tabValide.includes(tab)) {
     setTab('calendario');
@@ -380,7 +384,7 @@ async function condividiPdfWhatsApp() {
 }
   function openSnapshot(snapshot: Snapshot) {
     setWeekInfo(snapshot.weekInfo);
-    setEmployees(snapshot.employees);
+  
     setSchedule(snapshot.schedule);
     setClosed(snapshot.closed);
     setDayRests(snapshot.dayRests);
@@ -398,11 +402,12 @@ async function condividiPdfWhatsApp() {
         </div>
       </header>
 
-      <TopNavigation
+     <TopNavigation
   activeTab={tab}
   onDashboard={() => setTab('dashboard')}
   onRisorseUmane={() => setTab('calendario')}
   onBilancioGestionale={() => setTab('bilancio')}
+  onMarketing={() => setTab('marketing')}
 />
 
       <main className="container">
@@ -485,12 +490,20 @@ setPeriodoDashboard={setPeriodoDashboard}
                 <button
   type="button"
   className="btn gold"
+  onClick={() => setTab('whatsapp-turni')}
+>
+  📲 Turni WhatsApp
+</button>
+
+<button
+  type="button"
+  className="btn gold"
   disabled={pdfLoading}
   onClick={condividiPdfWhatsApp}
 >
   {pdfLoading
-    ? '⏳ Preparazione...'
-    : '📲 WhatsApp'}
+    ? '⏳ Preparazione PDF...'
+    : '📤 Condividi PDF'}
 </button>
                 <button className="btn gold" onClick={saveTurno}>💾 Salva turno</button>
                 <button className="btn green" onClick={replicaSettimanaSuccessiva}>🔁 Replica settimana</button>
@@ -538,6 +551,14 @@ setPeriodoDashboard={setPeriodoDashboard}
         )}
 
         {tab === 'dipendenti' && <EmployeesSection employees={employees} setEmployees={setEmployees} />}
+        {tab === 'whatsapp-turni' && (
+  <WhatsAppSection
+    employees={employees}
+    schedule={schedule}
+    closed={closed}
+    weekInfo={weekInfo}
+  />
+)}
 
         {tab === 'riepilogo' && <Summary summary={summary} totals={totals} />}
 
@@ -546,6 +567,7 @@ setPeriodoDashboard={setPeriodoDashboard}
         )}
 
         {tab === 'bilancio' && <ControlloGestioneSection />}
+        {tab === 'marketing' && <MarketingSection />}
 
         {tab === 'impostazioni' && <SettingsSection />}
 

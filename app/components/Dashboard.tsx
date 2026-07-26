@@ -1,13 +1,21 @@
+// app/components/Dashboard.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 
 import {
   caricaDocumentiAcquisto,
-  filtraPerCompetenzaGestionale,
   totalePerCategoria,
   type DocumentoAcquistoSalvato,
 } from '../lib/acquistiStorage';
+
+import {
+  ricalcolaControlloGestione,
+} from '../lib/controlloGestione/ricalcolaControlloGestione';
 
 type RispostaIncassiDashboard = {
   ok: boolean;
@@ -37,7 +45,6 @@ function dataIsoLocale(data: Date): string {
 
 function intervalloSettimanaAttuale() {
   const oggi = new Date();
-
   const giornoSettimana = oggi.getDay();
   const giorniDaLunedi =
     giornoSettimana === 0 ? 6 : giornoSettimana - 1;
@@ -74,6 +81,29 @@ function intervalloMeseCorrente() {
     dataDa: dataIsoLocale(primoGiorno),
     dataA: dataIsoLocale(ultimoGiorno),
   };
+}
+
+function filtraDocumentiPerPeriodo({
+  documenti,
+  dataDa,
+  dataA,
+}: {
+  documenti: DocumentoAcquistoSalvato[];
+  dataDa: string;
+  dataA: string;
+}): DocumentoAcquistoSalvato[] {
+  if (!dataDa || !dataA) {
+    return [];
+  }
+
+  return documenti.filter((documento) => {
+    const dataDocumento = documento.dataDocumento || '';
+
+    return (
+      dataDocumento >= dataDa &&
+      dataDocumento <= dataA
+    );
+  });
 }
 
 export function Dashboard({
@@ -120,15 +150,18 @@ export function Dashboard({
   const [incasso, setIncasso] = useState(0);
   const [coperti, setCoperti] = useState(0);
   const [numeroGiornate, setNumeroGiornate] = useState(0);
-  const [caricamentoIncassi, setCaricamentoIncassi] =
-    useState(false);
+  const [caricamentoIncassi, setCaricamentoIncassi] = useState(false);
   const [erroreIncassi, setErroreIncassi] = useState('');
 
   const [documentiAcquisto, setDocumentiAcquisto] = useState<
     DocumentoAcquistoSalvato[]
   >([]);
 
-  const personale = totals?.costo || 0;
+  const personale = Number(totals?.costo || 0);
+
+  function aggiornaAcquistiDashboard() {
+    setDocumentiAcquisto(caricaDocumentiAcquisto());
+  }
 
   async function aggiornaDatiDashboard() {
     setCaricamentoIncassi(true);
@@ -142,9 +175,7 @@ export function Dashboard({
 
       const risposta = await fetch(
         `/api/bacco/incassi?${parametri.toString()}`,
-        {
-          cache: 'no-store',
-        }
+        { cache: 'no-store' }
       );
 
       const esito =
@@ -157,14 +188,8 @@ export function Dashboard({
         );
       }
 
-      setIncasso(
-        Number(esito.riepilogo?.totaleIncasso || 0)
-      );
-
-      setCoperti(
-        Number(esito.riepilogo?.totaleCoperti || 0)
-      );
-
+      setIncasso(Number(esito.riepilogo?.totaleIncasso || 0));
+      setCoperti(Number(esito.riepilogo?.totaleCoperti || 0));
       setNumeroGiornate(
         Number(esito.riepilogo?.numeroGiornate || 0)
       );
@@ -187,65 +212,135 @@ export function Dashboard({
       setCaricamentoIncassi(false);
     }
 
-    setDocumentiAcquisto(caricaDocumentiAcquisto());
+    aggiornaAcquistiDashboard();
   }
 
   useEffect(() => {
     aggiornaDatiDashboard();
 
-    window.addEventListener('focus', aggiornaDatiDashboard);
-    window.addEventListener('storage', aggiornaDatiDashboard);
+    const aggiornaTutto = () => {
+      aggiornaDatiDashboard();
+    };
+
+    window.addEventListener('focus', aggiornaTutto);
+    window.addEventListener('storage', aggiornaTutto);
+    window.addEventListener('slm:acquisti-updated', aggiornaTutto);
+    window.addEventListener('slm:bacco-updated', aggiornaTutto);
 
     return () => {
-      window.removeEventListener(
-        'focus',
-        aggiornaDatiDashboard
-      );
-
-      window.removeEventListener(
-        'storage',
-        aggiornaDatiDashboard
-      );
+      window.removeEventListener('focus', aggiornaTutto);
+      window.removeEventListener('storage', aggiornaTutto);
+      window.removeEventListener('slm:acquisti-updated', aggiornaTutto);
+      window.removeEventListener('slm:bacco-updated', aggiornaTutto);
     };
+  }, [periodoDashboard.dataDa, periodoDashboard.dataA]);
+
+  const documentiPeriodo = useMemo(() => {
+    return filtraDocumentiPerPeriodo({
+      documenti: documentiAcquisto,
+      dataDa: periodoDashboard.dataDa,
+      dataA: periodoDashboard.dataA,
+    });
   }, [
+    documentiAcquisto,
     periodoDashboard.dataDa,
     periodoDashboard.dataA,
   ]);
 
-  const anno = new Date().getFullYear();
-  const mese = new Date().getMonth() + 1;
-
-  const documentiMese = useMemo(() => {
-    return filtraPerCompetenzaGestionale({
-      documenti: documentiAcquisto,
-      anno,
-      mese,
-    });
-  }, [documentiAcquisto, anno, mese]);
-
   const materiePrime = useMemo(() => {
     return totalePerCategoria(
-      documentiMese,
+      documentiPeriodo,
       'Materie prime'
     );
-  }, [documentiMese]);
+  }, [documentiPeriodo]);
 
-  const scontrinoMedio =
+  const materialeConsumo = useMemo(() => {
+    return totalePerCategoria(
+      documentiPeriodo,
+      'Materiale di consumo'
+    );
+  }, [documentiPeriodo]);
+
+  const utenze = useMemo(() => {
+    return totalePerCategoria(documentiPeriodo, 'Utenze');
+  }, [documentiPeriodo]);
+
+  const affitti = useMemo(() => {
+    return totalePerCategoria(documentiPeriodo, 'Affitti');
+  }, [documentiPeriodo]);
+
+  const consulenze = useMemo(() => {
+    return totalePerCategoria(documentiPeriodo, 'Consulenze');
+  }, [documentiPeriodo]);
+
+  const manutenzioni = useMemo(() => {
+    return totalePerCategoria(
+      documentiPeriodo,
+      'Manutenzioni e riparazioni'
+    );
+  }, [documentiPeriodo]);
+
+  const altriCosti = useMemo(() => {
+    return (
+      totalePerCategoria(documentiPeriodo, 'Costi straordinari') +
+      totalePerCategoria(documentiPeriodo, 'Altri costi') +
+      totalePerCategoria(documentiPeriodo, 'Bibite') +
+      totalePerCategoria(documentiPeriodo, 'Imballaggi') +
+      totalePerCategoria(documentiPeriodo, 'Detergenti') +
+      totalePerCategoria(documentiPeriodo, 'Legna')
+    );
+  }, [documentiPeriodo]);
+
+  const scontrinoMedioBacco =
     coperti > 0 ? incasso / coperti : 0;
 
-  const mediaGiornaliera =
+  const mediaGiornalieraBacco =
     numeroGiornate > 0 ? incasso / numeroGiornate : 0;
 
-  const percMaterie =
-    incasso > 0 ? (materiePrime / incasso) * 100 : 0;
+  const controlloGestione = useMemo(() => {
+    return ricalcolaControlloGestione({
+      periodoCorrente: {
+        fatturato: incasso,
+        coperti,
+        numeroGiornate,
+        scontrinoMedioBacco,
+        mediaGiornalieraBacco,
+        costi: {
+          materiePrime,
+          personale,
+          materialiConsumo: materialeConsumo,
+          utenze,
+          affitto: affitti,
+          servizi: consulenze,
+          manutenzioni,
+          altriCosti,
+        },
+      },
+    });
+  }, [
+    incasso,
+    coperti,
+    numeroGiornate,
+    scontrinoMedioBacco,
+    mediaGiornalieraBacco,
+    materiePrime,
+    personale,
+    materialeConsumo,
+    utenze,
+    affitti,
+    consulenze,
+    manutenzioni,
+    altriCosti,
+  ]);
 
-  const percPersonale =
-    incasso > 0 ? (personale / incasso) * 100 : 0;
-
-  const margineProvvisorio = Math.max(
-    0,
-    100 - percMaterie - percPersonale
-  );
+  const coloreSalute =
+    controlloGestione.salute.livello === 'positivo'
+      ? '🟢'
+      : controlloGestione.salute.livello === 'attenzione'
+        ? '🟠'
+        : controlloGestione.salute.livello === 'critico'
+          ? '🔴'
+          : '⚪';
 
   return (
     <section>
@@ -273,8 +368,7 @@ export function Dashboard({
               : 'btn green'
           }
           onClick={() => {
-            const intervallo =
-              intervalloSettimanaAttuale();
+            const intervallo = intervalloSettimanaAttuale();
 
             setPeriodoDashboard({
               modalita: 'settimana',
@@ -293,8 +387,7 @@ export function Dashboard({
               : 'btn green'
           }
           onClick={() => {
-            const intervallo =
-              intervalloMeseCorrente();
+            const intervallo = intervalloMeseCorrente();
 
             setPeriodoDashboard({
               modalita: 'mese',
@@ -382,10 +475,7 @@ export function Dashboard({
         </div>
       )}
 
-      <p
-        className="muted"
-        style={{ marginTop: 16 }}
-      >
+      <p className="muted" style={{ marginTop: 16 }}>
         Periodo visualizzato:{' '}
         <strong>
           {new Date(
@@ -431,18 +521,16 @@ export function Dashboard({
 
         <div className="kpi">
           <span>🧾 Scontrino medio</span>
-          <strong>{euro(scontrinoMedio)}</strong>
-          <small>Incasso ÷ coperti</small>
+          <strong>{euro(scontrinoMedioBacco)}</strong>
+          <small>Dati Bacco</small>
         </div>
 
         <div className="kpi">
           <span>📅 Media giornaliera</span>
-          <strong>{euro(mediaGiornaliera)}</strong>
+          <strong>{euro(mediaGiornalieraBacco)}</strong>
           <small>
             {numeroGiornate}{' '}
-            {numeroGiornate === 1
-              ? 'giornata'
-              : 'giornate'}
+            {numeroGiornate === 1 ? 'giornata' : 'giornate'}
           </small>
         </div>
       </div>
@@ -465,11 +553,14 @@ export function Dashboard({
 
           <strong>
             {incasso > 0
-              ? `${percMaterie.toFixed(1)}%`
-              : '—'}
+              ? `${controlloGestione.percentuali.materiePrime.toFixed(1)}%`
+              : euro(materiePrime)}
           </strong>
 
-          <small>{euro(materiePrime)}</small>
+          <small>
+            {euro(materiePrime)} · {documentiPeriodo.length}{' '}
+            documenti nel periodo
+          </small>
         </button>
 
         <button
@@ -480,8 +571,8 @@ export function Dashboard({
 
           <strong>
             {incasso > 0
-              ? `${percPersonale.toFixed(1)}%`
-              : '—'}
+              ? `${controlloGestione.percentuali.personale.toFixed(1)}%`
+              : euro(personale)}
           </strong>
 
           <small>{euro(personale)}</small>
@@ -492,8 +583,14 @@ export function Dashboard({
           onClick={onOpenMaterialiConsumo}
         >
           <span>🧻 Materiale consumo</span>
-          <strong>—</strong>
-          <small>Da collegare</small>
+
+          <strong>
+            {incasso > 0
+              ? `${controlloGestione.percentuali.materialiConsumo.toFixed(1)}%`
+              : euro(materialeConsumo)}
+          </strong>
+
+          <small>{euro(materialeConsumo)}</small>
         </button>
 
         <button
@@ -501,43 +598,79 @@ export function Dashboard({
           onClick={onOpenCostiFissi}
         >
           <span>🏢 Costi fissi</span>
-          <strong>—</strong>
-          <small>Da collegare</small>
+
+          <strong>
+            {euro(
+              utenze +
+                affitti +
+                consulenze +
+                manutenzioni +
+                altriCosti
+            )}
+          </strong>
+
+          <small>Utenze, affitti e altri costi</small>
         </button>
 
         <button
           className="kpi green module-button"
           onClick={onOpenUtile}
         >
-          <span>📈 Margine provvisorio</span>
+          <span>📈 Margine operativo</span>
 
           <strong>
             {incasso > 0
-              ? `${margineProvvisorio.toFixed(1)}%`
+              ? `${controlloGestione.percentuali.margine.toFixed(1)}%`
               : '—'}
           </strong>
 
-          <small>▶ Dettaglio</small>
+          <small>
+            {euro(controlloGestione.margineOperativo)}
+          </small>
         </button>
       </div>
 
       <div className="card">
-        <h2>🚦 Stato Azienda</h2>
+        <h2>🚦 Salute Aziendale</h2>
 
         <p style={{ fontSize: 30, fontWeight: 800 }}>
-          {incasso === 0
-            ? '⚪ Nessun incasso nel periodo selezionato'
-            : percMaterie <= 30
-              ? '🟢 Materie prime sotto controllo'
-              : percMaterie <= 33
-                ? '🟠 Materie prime da controllare'
-                : '🔴 Materie prime troppo alte'}
+          {coloreSalute} {controlloGestione.salute.titolo}
+        </p>
+
+        <p>
+          Punteggio:{' '}
+          <strong>
+            {controlloGestione.salute.punteggio}/100
+          </strong>
         </p>
 
         <p className="muted">
-          L'obiettivo è mantenere le materie prime sotto il
-          30% del fatturato.
+          {controlloGestione.salute.sintesi}
         </p>
+
+        {controlloGestione.salute.attenzioni.length > 0 && (
+          <>
+            <h3>⚠️ Da controllare</h3>
+
+            <ul>
+              {controlloGestione.salute.attenzioni.map((voce) => (
+                <li key={voce}>{voce}</li>
+              ))}
+            </ul>
+          </>
+        )}
+
+        {controlloGestione.salute.azioniConsigliate.length > 0 && (
+          <>
+            <h3>💡 Azioni consigliate</h3>
+
+            <ul>
+              {controlloGestione.salute.azioniConsigliate.map((voce) => (
+                <li key={voce}>{voce}</li>
+              ))}
+            </ul>
+          </>
+        )}
       </div>
 
       <div className="quick-grid">
@@ -572,8 +705,7 @@ export function Dashboard({
         <h2>📌 Settimana {week}</h2>
 
         <p className="muted">
-          Collaboratori attivi{' '}
-          <strong>{employeeCount}</strong> · Turni{' '}
+          Collaboratori attivi <strong>{employeeCount}</strong> · Turni{' '}
           <strong>{totals.turni}</strong>
         </p>
       </div>

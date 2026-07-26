@@ -5,7 +5,23 @@ type ScheduleMap = Record<string, string[]>;
 type ClosedMap = Record<string, boolean>;
 
 export function normalizePhoneNumber(phone?: string) {
-  return (phone || '').replace(/\D/g, '');
+  let normalized = (phone || '').replace(/\D/g, '');
+
+  if (!normalized) return '';
+
+  if (normalized.startsWith('0039')) {
+    normalized = normalized.slice(2);
+  }
+
+  if (normalized.startsWith('39') && normalized.length >= 11) {
+    return normalized;
+  }
+
+  if (normalized.length === 10) {
+    return `39${normalized}`;
+  }
+
+  return normalized;
 }
 
 export function getEmployeeTurns(
@@ -59,6 +75,11 @@ export function formatEmployeeTurnsMessage(
 
 export function whatsappLink(phone: string, message: string) {
   const normalized = normalizePhoneNumber(phone);
+
+  if (!normalized) {
+    return '';
+  }
+
   return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
 }
 

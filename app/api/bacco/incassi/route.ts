@@ -315,8 +315,6 @@ export async function GET(request: Request) {
 export async function POST(
   request: Request
 ) {
-  let importId = '';
-
   try {
     const formData =
       await request.formData();
@@ -469,10 +467,33 @@ export async function POST(
       );
     }
 
+    /*
+     * Protezione aggiuntiva:
+     * se nel file la stessa data/area compare più di una volta,
+     * viene mantenuta una sola riga, evitando cumuli interni.
+     */
+    const mappaAree =
+      new Map<string, RigaArea>();
+
+    for (const riga of righeAree) {
+      const chiave =
+        `${riga.data}|${riga.area}`;
+
+      mappaAree.set(chiave, riga);
+    }
+
+    const areeUniche =
+      Array.from(mappaAree.values())
+        .sort((a, b) =>
+          `${a.data}|${a.area}`.localeCompare(
+            `${b.data}|${b.area}`
+          )
+        );
+
     const mappaGiornate =
       new Map<string, RigaGiornaliera>();
 
-    for (const riga of righeAree) {
+    for (const riga of areeUniche) {
       const esistente =
         mappaGiornate.get(riga.data);
 
@@ -527,9 +548,13 @@ export async function POST(
     const supabase =
       getSupabaseAdmin();
 
+    /*
+     * Se lo stesso report esiste già, riutilizziamo il suo import_id.
+     * Non blocchiamo l'utente: i dati giornalieri vengono aggiornati.
+     */
     const {
-      data: duplicato,
-      error: erroreDuplicato,
+      data: importEsistente,
+      error: erroreRicercaImport,
     } = await supabase
       .from('bacco_import_incassi')
       .select('id')
@@ -539,59 +564,78 @@ export async function POST(
       )
       .maybeSingle();
 
-    if (erroreDuplicato) {
-      throw erroreDuplicato;
+    if (erroreRicercaImport) {
+      throw erroreRicercaImport;
     }
 
-    if (duplicato) {
-      return NextResponse.json(
-        {
-          ok: false,
-          duplicato: true,
-          messaggio:
-            'Questo report degli incassi risulta già importato.',
-        },
-        {
-          status: 409,
-        }
-      );
+    let importId =
+      importEsistente?.id || '';
+
+    if (importId) {
+      const { error: erroreAggiornamento } =
+        await supabase
+          .from('bacco_import_incassi')
+          .update({
+            nome_file: file.name,
+            periodo_da: periodoDa,
+            periodo_a: periodoA,
+            totale_incasso:
+              totaleIncasso,
+            totale_coperti:
+              totaleCoperti,
+            totale_operazioni: 0,
+            importato_il:
+              new Date().toISOString(),
+          })
+          .eq('id', importId);
+
+      if (erroreAggiornamento) {
+        throw erroreAggiornamento;
+      }
+    } else {
+      const {
+        data: nuovoImport,
+        error: erroreImport,
+      } = await supabase
+        .from('bacco_import_incassi')
+        .insert({
+          chiave_duplicato:
+            chiaveDuplicato,
+          nome_file: file.name,
+          periodo_da: periodoDa,
+          periodo_a: periodoA,
+          totale_incasso:
+            totaleIncasso,
+          totale_coperti:
+            totaleCoperti,
+          totale_operazioni: 0,
+          importato_il:
+            new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+
+      if (erroreImport) {
+        throw erroreImport;
+      }
+
+      importId = nuovoImport.id;
     }
 
-    const {
-      data: nuovoImport,
-      error: erroreImport,
-    } = await supabase
-      .from('bacco_import_incassi')
-      .insert({
-        chiave_duplicato:
-          chiaveDuplicato,
-        nome_file: file.name,
-        periodo_da: periodoDa,
-        periodo_a: periodoA,
-        totale_incasso:
-          totaleIncasso,
-        totale_coperti:
-          totaleCoperti,
-        totale_operazioni: 0,
-        importato_il:
-          new Date().toISOString(),
-      })
-      .select('id')
-      .single();
-
-    if (erroreImport) {
-      throw erroreImport;
-    }
-
-    importId = nuovoImport.id;
-
+    /*
+     * UPSERT:
+     * - data è unica nelle giornate;
+     * - data + area sono uniche nel dettaglio aree.
+     * In questo modo una nuova importazione sostituisce i valori
+     * esistenti e non li somma.
+     */
     const {
       error: erroreGiornate,
     } = await supabase
       .from(
         'bacco_incassi_giornalieri'
       )
-      .insert(
+      .upsert(
         giornate.map((giornata) => ({
           import_id: importId,
           data: giornata.data,
@@ -602,7 +646,10 @@ export async function POST(
           operazioni: 0,
           creato_il:
             new Date().toISOString(),
-        }))
+        })),
+        {
+          onConflict: 'data',
+        }
       );
 
     if (erroreGiornate) {
@@ -613,8 +660,8 @@ export async function POST(
       error: erroreAree,
     } = await supabase
       .from('bacco_incassi_aree')
-      .insert(
-        righeAree.map((riga) => ({
+      .upsert(
+        areeUniche.map((riga) => ({
           import_id: importId,
           data: riga.data,
           area: riga.area,
@@ -622,7 +669,10 @@ export async function POST(
           coperti: riga.coperti,
           creato_il:
             new Date().toISOString(),
-        }))
+        })),
+        {
+          onConflict: 'data,area',
+        }
       );
 
     if (erroreAree) {
@@ -631,7 +681,8 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
-      duplicato: false,
+      duplicato:
+        Boolean(importEsistente),
       importId,
       riepilogo: {
         nomeFile: file.name,
@@ -642,31 +693,20 @@ export async function POST(
         giornateImportate:
           giornate.length,
         areeImportate:
-          righeAree.length,
+          areeUniche.length,
       },
       messaggio:
-        `Incassi giornalieri importati: ` +
-        `${totaleIncasso.toFixed(2)} €, ` +
-        `${totaleCoperti} coperti e ` +
-        `${giornate.length} giornate.`,
+        importEsistente
+          ? `Incassi aggiornati senza duplicazioni: ` +
+            `${totaleIncasso.toFixed(2)} €, ` +
+            `${totaleCoperti} coperti e ` +
+            `${giornate.length} giornate.`
+          : `Incassi importati: ` +
+            `${totaleIncasso.toFixed(2)} €, ` +
+            `${totaleCoperti} coperti e ` +
+            `${giornate.length} giornate.`,
     });
   } catch (error) {
-    if (importId) {
-      try {
-        const supabase =
-          getSupabaseAdmin();
-
-        await supabase
-          .from(
-            'bacco_import_incassi'
-          )
-          .delete()
-          .eq('id', importId);
-      } catch {
-        // Conserviamo l’errore originale.
-      }
-    }
-
     return NextResponse.json(
       {
         ok: false,
