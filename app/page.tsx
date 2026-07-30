@@ -125,32 +125,155 @@ const [pdfLoading, setPdfLoading] =
   useState(false);
 
   useEffect(() => {
-    const load = (key: string, fallback: any) => {
-      try {
-        return JSON.parse(localStorage.getItem(key) || '') || fallback;
-      } catch {
-        return fallback;
-      }
-    };
+    let componenteAttivo = true;
 
-    setEmployees(load('slm_v3_employees', defaultEmployees));
-    setSchedule(load('slm_v3_schedule', defaultSchedule));
-    setClosed(load('slm_v3_closed', defaultClosed));
-    setDayRests(load('slm_v3_rests', defaultDayRests));
-    setWeekInfo(load('slm_v3_week', makeWeekInfo()));
-    setHistory(load('slm_v3_history', []));
-    setStorageLoaded(true);
+    async function caricaStatoGestionale() {
+      try {
+        const risposta = await fetch('/api/gestionale', {
+          method: 'GET',
+          cache: 'no-store',
+        });
+
+        const risultato = await risposta.json();
+
+        if (!risposta.ok || !risultato.ok) {
+          throw new Error(
+            risultato.error ||
+              'Impossibile caricare lo stato del gestionale.'
+          );
+        }
+
+        if (!componenteAttivo) return;
+
+        const stato = risultato.stato || {};
+
+        setEmployees(
+          Array.isArray(stato.employees) &&
+            stato.employees.length > 0
+            ? stato.employees
+            : defaultEmployees
+        );
+
+        setSchedule(
+          stato.schedule &&
+            Object.keys(stato.schedule).length > 0
+            ? stato.schedule
+            : defaultSchedule
+        );
+
+        setClosed(
+          stato.closed &&
+            Object.keys(stato.closed).length > 0
+            ? stato.closed
+            : defaultClosed
+        );
+
+        setDayRests(
+          stato.rests &&
+            Object.keys(stato.rests).length > 0
+            ? stato.rests
+            : defaultDayRests
+        );
+
+        setWeekInfo(
+          stato.weekInfo &&
+            Object.keys(stato.weekInfo).length > 0
+            ? stato.weekInfo
+            : makeWeekInfo()
+        );
+
+        setHistory(
+          Array.isArray(stato.history)
+            ? stato.history
+            : []
+        );
+      } catch (errore) {
+        console.error(
+          'Errore caricamento gestionale:',
+          errore
+        );
+
+        if (!componenteAttivo) return;
+
+        setEmployees(defaultEmployees);
+        setSchedule(defaultSchedule);
+        setClosed(defaultClosed);
+        setDayRests(defaultDayRests);
+        setWeekInfo(makeWeekInfo());
+        setHistory([]);
+
+        alert(
+          'Non è stato possibile caricare i dati da Supabase. ' +
+            'Sono stati caricati i dati iniziali.'
+        );
+      } finally {
+        if (componenteAttivo) {
+          setStorageLoaded(true);
+        }
+      }
+    }
+
+    caricaStatoGestionale();
+
+    return () => {
+      componenteAttivo = false;
+    };
   }, []);
 
   useEffect(() => {
     if (!storageLoaded) return;
-    localStorage.setItem('slm_v3_employees', JSON.stringify(employees));
-    localStorage.setItem('slm_v3_schedule', JSON.stringify(schedule));
-    localStorage.setItem('slm_v3_closed', JSON.stringify(closed));
-    localStorage.setItem('slm_v3_rests', JSON.stringify(dayRests));
-    localStorage.setItem('slm_v3_week', JSON.stringify(weekInfo));
-    localStorage.setItem('slm_v3_history', JSON.stringify(history));
-  }, [storageLoaded,employees, schedule, closed, dayRests, weekInfo, history]);
+
+    const timerSalvataggio = window.setTimeout(
+      async () => {
+        try {
+          const risposta = await fetch(
+            '/api/gestionale',
+            {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                employees,
+                schedule,
+                closed,
+                rests: dayRests,
+                weekInfo,
+                history,
+              }),
+            }
+          );
+
+          const risultato = await risposta.json();
+
+          if (!risposta.ok || !risultato.ok) {
+            throw new Error(
+              risultato.error ||
+                'Impossibile salvare il gestionale.'
+            );
+          }
+        } catch (errore) {
+          console.error(
+            'Errore salvataggio gestionale:',
+            errore
+          );
+        }
+      },
+      700
+    );
+
+    return () => {
+      window.clearTimeout(timerSalvataggio);
+    };
+  }, [
+    storageLoaded,
+    employees,
+    schedule,
+    closed,
+    dayRests,
+    weekInfo,
+    history,
+  ]);
 
   const summary = useMemo(() => calculateSummary(schedule, closed, employees), [schedule, closed, employees]);
   const totals = useMemo(() => calculateTotals(summary), [summary]);

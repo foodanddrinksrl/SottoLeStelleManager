@@ -17,12 +17,8 @@ import {
 
 import {
   applicaSegno,
-  caricaDocumentiAcquisto,
-  caricaStoricoImportazioniAcquisti,
   creaChiaveDuplicato,
   filtraDocumentiPerIntervallo,
-  importaDocumentiSenzaDuplicati,
-  registraImportazioneAcquisti,
   memorizzaClassificazione,
   trovaClassificazioneMemorizzata,
   segnoTipoDocumento,
@@ -33,9 +29,10 @@ import {
   type StoricoImportazioneAcquisti,
 } from '../lib/acquistiStorage';
 
+import { database } from '../lib/database';
+
 import {
   aggiornaArchivioFornitori,
-  caricaArchivioFornitori,
   type FornitoreSalvato,
 } from '../lib/fornitoriStorage';
 
@@ -206,31 +203,66 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
     useState<string | null>(null);
 
   useEffect(() => {
-    const documentiEsistenti = caricaDocumentiAcquisto();
-    const fornitoriEsistenti = caricaArchivioFornitori();
+    let componenteAttivo = true;
 
-    setArchivioSalvato(documentiEsistenti);
-    setStoricoImportazioni(caricaStoricoImportazioniAcquisti());
+    async function avviaCentroAcquisti() {
+      setCaricamento(true);
+      setErrore('');
 
-    if (fornitoriEsistenti.length === 0 && documentiEsistenti.length > 0) {
-      setArchivioFornitori(
-        aggiornaArchivioFornitori(documentiEsistenti)
+      try {
+        const documenti =
+          await database.acquisti.caricaTutti();
+
+        if (!componenteAttivo) return;
+
+        setArchivioSalvato(documenti);
+        setStoricoImportazioni([]);
+
+        /*
+         * L’anagrafica fornitori viene ricostruita dai documenti
+         * presenti nell’archivio centrale.
+         */
+        setArchivioFornitori(
+          documenti.length > 0
+            ? aggiornaArchivioFornitori(documenti)
+            : []
+        );
+      } catch (error) {
+        if (!componenteAttivo) return;
+
+        setErrore(
+          error instanceof Error
+            ? error.message
+            : 'Errore durante il collegamento a Supabase.'
+        );
+      } finally {
+        if (componenteAttivo) {
+          setCaricamento(false);
+        }
+      }
+
+      /*
+       * La bozza non confermata resta temporaneamente nel browser.
+       * I documenti definitivi vengono letti soltanto da Supabase.
+       */
+      const bozza = caricaBozzaLocale();
+
+      if (!bozza || !componenteAttivo) return;
+
+      setNomeArchivio(bozza.nomeArchivio);
+      setAnalisi(bozza.analisi);
+      setCategorieRighe(bozza.categorieRighe || {});
+      setBozzaRipristinata(true);
+      setMessaggio(
+        `Bozza ripristinata automaticamente. Salvata il ${bozza.salvataIl}.`
       );
-    } else {
-      setArchivioFornitori(fornitoriEsistenti);
     }
 
-    const bozza = caricaBozzaLocale();
+    void avviaCentroAcquisti();
 
-    if (!bozza) return;
-
-    setNomeArchivio(bozza.nomeArchivio);
-    setAnalisi(bozza.analisi);
-    setCategorieRighe(bozza.categorieRighe || {});
-    setBozzaRipristinata(true);
-    setMessaggio(
-      `Bozza ripristinata automaticamente. Salvata il ${bozza.salvataIl}.`
-    );
+    return () => {
+      componenteAttivo = false;
+    };
   }, []);
 
   const riepilogoCategorie = useMemo(() => {
@@ -626,7 +658,7 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
     });
   }
 
-  function confermaImportazione() {
+  async function confermaImportazione() {
     if (!analisi) {
       alert('Non c’è alcuna importazione da confermare.');
       return;
@@ -636,7 +668,6 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
       (categoria) => categoria === 'Da classificare'
     ).length;
 
-
     if (nonClassificate > 0) {
       const continua = window.confirm(
         `Restano ${nonClassificate} righe da classificare. Vuoi importare comunque? Potrai completarle in seguito.`
@@ -644,7 +675,6 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
 
       if (!continua) return;
     }
-
 
     const documenti = creaDocumentiDaImportare();
 
@@ -665,48 +695,43 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
       });
     });
 
-    const chiaviEsistenti = new Set(
-      archivioSalvato.map((documento) => documento.chiaveDuplicato)
-    );
+    setCaricamento(true);
+    setErrore('');
+    setMessaggio('');
 
-    const documentiNuovi = documenti.filter(
-      (documento) => !chiaviEsistenti.has(documento.chiaveDuplicato)
-    );
+    try {
+      const esitoSalvataggio =
+        await database.acquisti.salva(documenti);
 
-    const risultato = importaDocumentiSenzaDuplicati(documenti);
-    const fornitoriAggiornati = aggiornaArchivioFornitori(documentiNuovi);
+      const archivioAggiornato =
+        await database.acquisti.caricaTutti();
 
-    const storicoAggiornato = registraImportazioneAcquisti({
-      nomeArchivio: nomeArchivio || 'Archivio XML senza nome',
-      documentiAnalizzati: documenti.length,
-      documentiImportati: risultato.importati,
-      duplicatiIgnorati: risultato.duplicati,
-      totaleAnalizzato: documenti.reduce(
-        (somma, documento) => somma + documento.totale,
-        0
-      ),
-      totaleImportato: risultato.documentiImportati.reduce(
-        (somma, documento) => somma + documento.totale,
-        0
-      ),
-      origine: nomeArchivio.toLowerCase().endsWith('.xml')
-        ? 'XML'
-        : 'ZIP/XML',
-    });
+      setArchivioSalvato(archivioAggiornato);
+      setArchivioFornitori(
+        archivioAggiornato.length > 0
+          ? aggiornaArchivioFornitori(archivioAggiornato)
+          : []
+      );
 
-    setArchivioSalvato(risultato.documentiFinali);
-    setStoricoImportazioni(storicoAggiornato);
-    setArchivioFornitori(fornitoriAggiornati);
-    eliminaBozzaLocale();
-    setAnalisi(null);
-    setNomeArchivio('');
-    setCategorieRighe({});
-    setFatturaAperta(null);
-    setBozzaRipristinata(false);
+      eliminaBozzaLocale();
+      setAnalisi(null);
+      setNomeArchivio('');
+      setCategorieRighe({});
+      setFatturaAperta(null);
+      setBozzaRipristinata(false);
 
-    setMessaggio(
-      `Importazione completata: ${risultato.importati} documenti nuovi, ${risultato.duplicati} duplicati ignorati.`
-    );
+      setMessaggio(
+        `Importazione completata su Supabase: ${esitoSalvataggio.salvati ?? 0} documenti nuovi salvati.`
+      );
+    } catch (error) {
+      setErrore(
+        error instanceof Error
+          ? error.message
+          : 'Errore durante il salvataggio su Supabase.'
+      );
+    } finally {
+      setCaricamento(false);
+    }
   }
 
   function menuCentroAcquisti() {
