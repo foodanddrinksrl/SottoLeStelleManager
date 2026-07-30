@@ -110,7 +110,7 @@ const [periodoDashboard, setPeriodoDashboard] =
   useState<PeriodoDashboard>(
     periodoSettimanaAttuale()
   );
-  const [employees, setEmployees] = useState<Dipendente[]>(defaultEmployees);
+  const [employees, setEmployees] = useState<Dipendente[]>([]);
   const [schedule, setSchedule] = useState<Record<string, string[]>>(defaultSchedule);
   const [closed, setClosed] = useState<Record<string, boolean>>(defaultClosed);
   const [dayRests, setDayRests] = useState<Record<string, string>>(defaultDayRests);
@@ -547,6 +547,50 @@ setPeriodoDashboard={setPeriodoDashboard}
               updateSelect={updateSelect}
               removeSelect={removeSelect}
             />
+            <div className="card no-print" style={{ marginTop: 20 }}>
+  <h2>✅ Controllo turni settimanali</h2>
+
+  {summary.length === 0 ? (
+    <p className="muted">
+      Nessun turno ancora assegnato.
+    </p>
+  ) : (
+    <div style={{ overflowX: 'auto' }}>
+      <table>
+        <thead>
+          <tr>
+            <th>Collaboratore</th>
+            <th>Reparto</th>
+            <th>Pranzi</th>
+            <th>Cene</th>
+            <th>Totale turni</th>
+            <th>Costo</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {summary.map((riga) => (
+            <tr key={`${riga.nome}-${riga.reparto}`}>
+              <td>{riga.nome}</td>
+              <td>{riga.reparto}</td>
+              <td>{riga.pranzi}</td>
+              <td>{riga.cene}</td>
+              <td>
+                <strong>{riga.turni}</strong>
+              </td>
+              <td>
+                {riga.costo.toLocaleString('it-IT', {
+                  style: 'currency',
+                  currency: 'EUR',
+                })}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+</div>
           </>
         )}
 

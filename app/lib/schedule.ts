@@ -3,23 +3,7 @@ import type { Dipendente, Reparto, SummaryRow, WeekInfo } from '../types';
 export const giorni = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'];
 export const reparti: Reparto[] = ['Pizzeria', 'Cucina', 'Sala'];
 
-export const defaultEmployees: Dipendente[] = [
-  { nome: 'Rosario', reparto: 'Pizzeria', costoTurno: 50, riposo: 'Martedì' },
-  { nome: 'Luca', reparto: 'Pizzeria', costoTurno: 50, riposo: 'Mercoledì' },
-  { nome: 'Luigi', reparto: 'Pizzeria', costoTurno: 50, riposo: 'Lunedì' },
-  { nome: 'Gabriele', reparto: 'Pizzeria', costoTurno: 50 },
-  { nome: 'Extra', reparto: 'Pizzeria', costoTurno: 50 },
-  { nome: 'Roberta', reparto: 'Cucina', costoTurno: 50, riposo: 'Lunedì' },
-  { nome: 'Rosa', reparto: 'Cucina', costoTurno: 50, riposo: 'Giovedì' },
-  { nome: 'Gesuè', reparto: 'Cucina', costoTurno: 50, riposo: 'Mercoledì' },
-  { nome: 'Miguel', reparto: 'Cucina', costoTurno: 50 },
-  { nome: 'Extra', reparto: 'Cucina', costoTurno: 50 },
-  { nome: 'Maddalena', reparto: 'Sala', costoTurno: 50 },
-  { nome: 'Miguel', reparto: 'Sala', costoTurno: 50 },
-  { nome: 'Luigi', reparto: 'Sala', costoTurno: 50, riposo: 'Lunedì' },
-  { nome: 'Rosa', reparto: 'Sala', costoTurno: 50, riposo: 'Giovedì' },
-  { nome: 'Extra', reparto: 'Sala', costoTurno: 50 },
-];
+export const defaultEmployees: Dipendente[] = [];
 
 export const defaultSchedule: Record<string, string[]> = {
   'Lunedì_Cena_Pizzeria': ['Rosario', 'Luca'],

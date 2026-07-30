@@ -18,8 +18,11 @@ import {
 import {
   applicaSegno,
   caricaDocumentiAcquisto,
+  caricaStoricoImportazioniAcquisti,
   creaChiaveDuplicato,
+  filtraDocumentiPerIntervallo,
   importaDocumentiSenzaDuplicati,
+  registraImportazioneAcquisti,
   memorizzaClassificazione,
   trovaClassificazioneMemorizzata,
   segnoTipoDocumento,
@@ -27,6 +30,7 @@ import {
   type DocumentoAcquistoSalvato,
   type RigaAcquistoSalvata,
   type ScadenzaAcquistoSalvata,
+  type StoricoImportazioneAcquisti,
 } from '../lib/acquistiStorage';
 
 import {
@@ -39,6 +43,7 @@ import { RicevimentoMerci } from './ricevimento/RicevimentoMerci';
 import { StoricoRicevimenti } from './ricevimento/StoricoRicevimenti';
 
 type Categoria = CategoriaGestionale;
+type TipoPeriodo = 'settimana' | 'mese' | 'personalizzato' | 'tutto';
 
 type SezioneCentroAcquisti =
   | 'fatture'
@@ -124,6 +129,38 @@ function eliminaBozzaLocale(): void {
   localStorage.removeItem(BOZZA_UI_KEY);
 }
 
+function dataIsoLocale(data: Date): string {
+  const anno = data.getFullYear();
+  const mese = String(data.getMonth() + 1).padStart(2, '0');
+  const giorno = String(data.getDate()).padStart(2, '0');
+  return `${anno}-${mese}-${giorno}`;
+}
+
+function intervalloSettimanaCorrente(): { dal: string; al: string } {
+  const oggi = new Date();
+  const giorno = oggi.getDay() || 7;
+  const lunedi = new Date(oggi);
+  lunedi.setDate(oggi.getDate() - giorno + 1);
+  const domenica = new Date(lunedi);
+  domenica.setDate(lunedi.getDate() + 6);
+
+  return {
+    dal: dataIsoLocale(lunedi),
+    al: dataIsoLocale(domenica),
+  };
+}
+
+function intervalloMeseCorrente(): { dal: string; al: string } {
+  const oggi = new Date();
+  const primo = new Date(oggi.getFullYear(), oggi.getMonth(), 1);
+  const ultimo = new Date(oggi.getFullYear(), oggi.getMonth() + 1, 0);
+
+  return {
+    dal: dataIsoLocale(primo),
+    al: dataIsoLocale(ultimo),
+  };
+}
+
 export function AcquistiSection({ onBack }: { onBack: () => void }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -154,11 +191,26 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
   const [archivioFornitori, setArchivioFornitori] =
     useState<FornitoreSalvato[]>([]);
 
+  const [storicoImportazioni, setStoricoImportazioni] =
+    useState<StoricoImportazioneAcquisti[]>([]);
+
+  const [tipoPeriodo, setTipoPeriodo] =
+    useState<TipoPeriodo>('mese');
+
+  const meseCorrente = intervalloMeseCorrente();
+
+  const [dataDal, setDataDal] = useState(meseCorrente.dal);
+  const [dataAl, setDataAl] = useState(meseCorrente.al);
+
+  const [fornitoreSelezionato, setFornitoreSelezionato] =
+    useState<string | null>(null);
+
   useEffect(() => {
     const documentiEsistenti = caricaDocumentiAcquisto();
     const fornitoriEsistenti = caricaArchivioFornitori();
 
     setArchivioSalvato(documentiEsistenti);
+    setStoricoImportazioni(caricaStoricoImportazioniAcquisti());
 
     if (fornitoriEsistenti.length === 0 && documentiEsistenti.length > 0) {
       setArchivioFornitori(
@@ -287,23 +339,121 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
     return { totale, scadute, prossimi7 };
   }, [analisi]);
 
-  const statisticheArchivio = useMemo(() => {
+  const documentiFiltrati = useMemo(() => {
+    if (tipoPeriodo === 'tutto') return archivioSalvato;
+
+    return filtraDocumentiPerIntervallo({
+      documenti: archivioSalvato,
+      dataDal,
+      dataAl,
+    });
+  }, [archivioSalvato, tipoPeriodo, dataDal, dataAl]);
+
+  const fornitoriPeriodo = useMemo(() => {
+    const mappa = new Map<
+      string,
+      {
+        chiave: string;
+        fornitore: string;
+        partitaIva: string;
+        documenti: number;
+        totale: number;
+      }
+    >();
+
+    documentiFiltrati.forEach((documento) => {
+      const chiave = documento.partitaIva || documento.fornitore;
+      const corrente = mappa.get(chiave) || {
+        chiave,
+        fornitore: documento.fornitore,
+        partitaIva: documento.partitaIva,
+        documenti: 0,
+        totale: 0,
+      };
+
+      corrente.documenti += 1;
+      corrente.totale += documento.totale;
+      mappa.set(chiave, corrente);
+    });
+
+    return Array.from(mappa.values()).sort(
+      (a, b) => Math.abs(b.totale) - Math.abs(a.totale)
+    );
+  }, [documentiFiltrati]);
+
+  const documentiFornitoreSelezionato = useMemo(() => {
+    if (!fornitoreSelezionato) return [];
+
+    return documentiFiltrati
+      .filter((documento) => {
+        const chiave = documento.partitaIva || documento.fornitore;
+        return chiave === fornitoreSelezionato;
+      })
+      .sort((a, b) => {
+        const confrontoData = b.dataDocumento.localeCompare(a.dataDocumento);
+        if (confrontoData !== 0) return confrontoData;
+
+        return b.numeroDocumento.localeCompare(a.numeroDocumento);
+      });
+  }, [documentiFiltrati, fornitoreSelezionato]);
+
+  const riepilogoFornitoreSelezionato = useMemo(() => {
     return {
-      numeroDocumenti: archivioSalvato.length,
-      totaleNetto: archivioSalvato.reduce(
+      documenti: documentiFornitoreSelezionato.length,
+      totale: documentiFornitoreSelezionato.reduce(
         (somma, documento) => somma + documento.totale,
         0
       ),
-      noteCredito: archivioSalvato.filter(
-        (documento) => documento.segno === -1
-      ).length,
-      fornitori: archivioFornitori.length,
-      articoli: archivioFornitori.reduce(
-        (somma, fornitore) => somma + fornitore.articoli.length,
+      imponibile: documentiFornitoreSelezionato.reduce(
+        (somma, documento) => somma + documento.imponibile,
+        0
+      ),
+      iva: documentiFornitoreSelezionato.reduce(
+        (somma, documento) => somma + documento.iva,
         0
       ),
     };
-  }, [archivioSalvato, archivioFornitori]);
+  }, [documentiFornitoreSelezionato]);
+
+  const statisticheArchivio = useMemo(() => {
+    return {
+      numeroDocumenti: documentiFiltrati.length,
+      totaleNetto: documentiFiltrati.reduce(
+        (somma, documento) => somma + documento.totale,
+        0
+      ),
+      noteCredito: documentiFiltrati.filter(
+        (documento) => documento.segno === -1
+      ).length,
+      fornitori: fornitoriPeriodo.length,
+      articoli: documentiFiltrati.reduce(
+        (somma, documento) => somma + documento.righe.length,
+        0
+      ),
+    };
+  }, [documentiFiltrati, fornitoriPeriodo]);
+
+  function impostaPeriodo(periodo: TipoPeriodo) {
+    setTipoPeriodo(periodo);
+    setFornitoreSelezionato(null);
+
+    if (periodo === 'settimana') {
+      const intervallo = intervalloSettimanaCorrente();
+      setDataDal(intervallo.dal);
+      setDataAl(intervallo.al);
+    }
+
+    if (periodo === 'mese') {
+      const intervallo = intervalloMeseCorrente();
+      setDataDal(intervallo.dal);
+      setDataAl(intervallo.al);
+    }
+
+    if (periodo === 'tutto') {
+      setDataDal('');
+      setDataAl('');
+    }
+  }
 
   async function importa(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -526,7 +676,26 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
     const risultato = importaDocumentiSenzaDuplicati(documenti);
     const fornitoriAggiornati = aggiornaArchivioFornitori(documentiNuovi);
 
+    const storicoAggiornato = registraImportazioneAcquisti({
+      nomeArchivio: nomeArchivio || 'Archivio XML senza nome',
+      documentiAnalizzati: documenti.length,
+      documentiImportati: risultato.importati,
+      duplicatiIgnorati: risultato.duplicati,
+      totaleAnalizzato: documenti.reduce(
+        (somma, documento) => somma + documento.totale,
+        0
+      ),
+      totaleImportato: risultato.documentiImportati.reduce(
+        (somma, documento) => somma + documento.totale,
+        0
+      ),
+      origine: nomeArchivio.toLowerCase().endsWith('.xml')
+        ? 'XML'
+        : 'ZIP/XML',
+    });
+
     setArchivioSalvato(risultato.documentiFinali);
+    setStoricoImportazioni(storicoAggiornato);
     setArchivioFornitori(fornitoriAggiornati);
     eliminaBozzaLocale();
     setAnalisi(null);
@@ -839,7 +1008,7 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
   }
 
   if (sezione === 'statistiche') {
-    const totaleMateriePrime = archivioSalvato.reduce(
+    const totaleMateriePrime = documentiFiltrati.reduce(
       (totale, documento) =>
         totale +
         documento.righe
@@ -902,8 +1071,26 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
       {menuCentroAcquisti()}
 
       <div className="card no-print">
-        <div className="actions">
-          <button className="btn green" onClick={onBack}>
+        <div
+          className="actions"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            gap: 10,
+            flexWrap: 'wrap',
+          }}
+        >
+          <button
+            className="btn green"
+            onClick={onBack}
+            style={{
+              flex: '0 0 auto',
+              width: 'auto',
+              minHeight: 42,
+              padding: '10px 16px',
+            }}
+          >
             ← Controllo di Gestione
           </button>
 
@@ -911,6 +1098,12 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
             className="btn gold"
             onClick={() => inputRef.current?.click()}
             disabled={caricamento}
+            style={{
+              flex: '0 0 auto',
+              width: 'auto',
+              minHeight: 42,
+              padding: '10px 16px',
+            }}
           >
             {caricamento ? '⏳ Lettura fatture…' : '📦 Importa ZIP/XML'}
           </button>
@@ -923,17 +1116,261 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
             style={{ display: 'none' }}
           />
 
-          {analisi && (
+    
+      <div className="card">
+        <h2>🏪 Importi fornitori nel periodo</h2>
+
+        {fornitoriPeriodo.length === 0 ? (
+          <p className="muted">
+            Nessun documento presente nel periodo selezionato.
+          </p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Fornitore</th>
+                  <th>Partita IVA</th>
+                  <th>Documenti</th>
+                  <th>Importo netto</th>
+                  <th>Dettaglio</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fornitoriPeriodo.map((fornitore) => (
+                  <tr
+                    key={fornitore.chiave}
+                    style={{
+                      cursor: 'pointer',
+                      background:
+                        fornitoreSelezionato === fornitore.chiave
+                          ? 'rgba(212,170,35,0.12)'
+                          : undefined,
+                    }}
+                    onClick={() =>
+                      setFornitoreSelezionato((corrente) =>
+                        corrente === fornitore.chiave
+                          ? null
+                          : fornitore.chiave
+                      )
+                    }
+                  >
+                    <td><strong>{fornitore.fornitore}</strong></td>
+                    <td>{fornitore.partitaIva || '—'}</td>
+                    <td>{fornitore.documenti}</td>
+                    <td><strong>{euro(fornitore.totale)}</strong></td>
+                    <td>
+                      <button
+                        className="btn gold"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setFornitoreSelezionato((corrente) =>
+                            corrente === fornitore.chiave
+                              ? null
+                              : fornitore.chiave
+                          );
+                        }}
+                      >
+                        {fornitoreSelezionato === fornitore.chiave
+                          ? 'Chiudi'
+                          : 'Apri documenti'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {fornitoreSelezionato && (
+        <div className="card">
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div>
+              <h2>📄 Documenti del fornitore</h2>
+              <p className="muted">
+                Fatture, note di credito e bolle presenti nel periodo selezionato.
+              </p>
+            </div>
+
+            <button
+              className="btn"
+              onClick={() => setFornitoreSelezionato(null)}
+            >
+              Chiudi dettaglio
+            </button>
+          </div>
+
+          <div className="dashboard">
+            <div className="kpi green">
+              <span>Documenti</span>
+              <strong>{riepilogoFornitoreSelezionato.documenti}</strong>
+            </div>
+
+            <div className="kpi">
+              <span>Imponibile</span>
+              <strong>{euro(riepilogoFornitoreSelezionato.imponibile)}</strong>
+            </div>
+
+            <div className="kpi">
+              <span>IVA</span>
+              <strong>{euro(riepilogoFornitoreSelezionato.iva)}</strong>
+            </div>
+
+            <div className="kpi gold">
+              <span>Totale netto</span>
+              <strong>{euro(riepilogoFornitoreSelezionato.totale)}</strong>
+            </div>
+          </div>
+
+          {documentiFornitoreSelezionato.length === 0 ? (
+            <p className="muted">
+              Nessun documento disponibile per questo fornitore nel periodo.
+            </p>
+          ) : (
+            <div style={{ overflowX: 'auto', marginTop: 14 }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Documento</th>
+                    <th>Numero</th>
+                    <th>Origine</th>
+                    <th>Imponibile</th>
+                    <th>IVA</th>
+                    <th>Totale</th>
+                    <th>Scadenze</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {documentiFornitoreSelezionato.map((documento) => (
+                    <tr key={documento.id}>
+                      <td>{dataIt(documento.dataDocumento)}</td>
+                      <td>
+                        <strong>
+                          {documento.segno === -1
+                            ? 'Nota di credito'
+                            : documento.origine === 'Bolla IA'
+                              ? 'Bolla'
+                              : 'Fattura'}
+                        </strong>
+                        <div className="muted">
+                          {documento.tipoDocumento || '—'}
+                        </div>
+                      </td>
+                      <td>{documento.numeroDocumento || '—'}</td>
+                      <td>{documento.origine}</td>
+                      <td>{euro(documento.imponibile)}</td>
+                      <td>{euro(documento.iva)}</td>
+                      <td>
+                        <strong>{euro(documento.totale)}</strong>
+                      </td>
+                      <td>
+                        {documento.scadenze.length === 0
+                          ? '—'
+                          : documento.scadenze
+                              .map((scadenza) =>
+                                scadenza.dataScadenza
+                                  ? `${dataIt(scadenza.dataScadenza)} · ${euro(scadenza.importo)}`
+                                  : euro(scadenza.importo)
+                              )
+                              .join(' / ')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="card">
+        <h2>📚 Storico file XML caricati</h2>
+
+        {storicoImportazioni.length === 0 ? (
+          <p className="muted">
+            Lo storico inizierà dal prossimo caricamento confermato. I documenti
+            già presenti restano protetti dal controllo duplicati.
+          </p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Data caricamento</th>
+                  <th>File</th>
+                  <th>Analizzati</th>
+                  <th>Importati</th>
+                  <th>Duplicati ignorati</th>
+                  <th>Totale importato</th>
+                </tr>
+              </thead>
+              <tbody>
+                {storicoImportazioni.map((voce) => (
+                  <tr key={voce.id}>
+                    <td>{new Date(voce.importatoIl).toLocaleString('it-IT')}</td>
+                    <td><strong>{voce.nomeArchivio}</strong></td>
+                    <td>{voce.documentiAnalizzati}</td>
+                    <td>{voce.documentiImportati}</td>
+                    <td>{voce.duplicatiIgnorati}</td>
+                    <td><strong>{euro(voce.totaleImportato)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {analisi && (
             <>
-              <button className="btn gold" onClick={salvaBozza}>
+              <button
+                className="btn gold"
+                onClick={salvaBozza}
+                style={{
+                  flex: '0 0 auto',
+                  width: 'auto',
+                  minHeight: 42,
+                  padding: '10px 16px',
+                }}
+              >
                 💾 Salva bozza
               </button>
 
-              <button className="btn green" onClick={confermaImportazione}>
+              <button
+                className="btn green"
+                onClick={confermaImportazione}
+                style={{
+                  flex: '0 0 auto',
+                  width: 'auto',
+                  minHeight: 42,
+                  padding: '10px 16px',
+                }}
+              >
                 ✅ Conferma e importa
               </button>
 
-              <button className="btn danger" onClick={eliminaBozza}>
+              <button
+                className="btn danger"
+                onClick={eliminaBozza}
+                style={{
+                  flex: '0 0 auto',
+                  width: 'auto',
+                  minHeight: 42,
+                  padding: '10px 16px',
+                }}
+              >
                 Elimina bozza
               </button>
             </>
@@ -963,6 +1400,82 @@ export function AcquistiSection({ onBack }: { onBack: () => void }) {
           <p>{errore}</p>
         </div>
       )}
+
+      <div className="card no-print">
+        <h2>📅 Periodo acquisti</h2>
+
+        <div className="actions">
+          <button
+            className={tipoPeriodo === 'settimana' ? 'btn gold' : 'btn'}
+            onClick={() => impostaPeriodo('settimana')}
+          >
+            Settimana
+          </button>
+
+          <button
+            className={tipoPeriodo === 'mese' ? 'btn gold' : 'btn'}
+            onClick={() => impostaPeriodo('mese')}
+          >
+            Mese
+          </button>
+
+          <button
+            className={tipoPeriodo === 'personalizzato' ? 'btn gold' : 'btn'}
+            onClick={() => setTipoPeriodo('personalizzato')}
+          >
+            Periodo personalizzato
+          </button>
+
+          <button
+            className={tipoPeriodo === 'tutto' ? 'btn gold' : 'btn'}
+            onClick={() => impostaPeriodo('tutto')}
+          >
+            Tutto
+          </button>
+        </div>
+
+        {tipoPeriodo !== 'tutto' && (
+          <div
+            style={{
+              display: 'flex',
+              gap: 12,
+              flexWrap: 'wrap',
+              alignItems: 'end',
+              marginTop: 14,
+            }}
+          >
+            <label>
+              <span className="muted">Dal</span>
+              <input
+                type="date"
+                value={dataDal}
+                onChange={(event) => {
+                  setDataDal(event.target.value);
+                  setTipoPeriodo('personalizzato');
+                  setFornitoreSelezionato(null);
+                }}
+              />
+            </label>
+
+            <label>
+              <span className="muted">Al</span>
+              <input
+                type="date"
+                value={dataAl}
+                onChange={(event) => {
+                  setDataAl(event.target.value);
+                  setTipoPeriodo('personalizzato');
+                  setFornitoreSelezionato(null);
+                }}
+              />
+            </label>
+          </div>
+        )}
+
+        <p className="muted" style={{ marginTop: 12 }}>
+          I totali usano sempre la data del documento XML.
+        </p>
+      </div>
 
       <div className="card">
         <h2>🗄️ Archivio definitivo</h2>

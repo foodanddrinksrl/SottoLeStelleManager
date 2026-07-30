@@ -44,24 +44,18 @@ export type ScadenzaAcquistoSalvata = {
 export type DocumentoAcquistoSalvato = {
   id: string;
   chiaveDuplicato: string;
-
   tipoDocumento: string;
   segno: 1 | -1;
-
   fornitore: string;
   partitaIva: string;
   numeroDocumento: string;
-
   dataDocumento: string;
   dataRicezione: string;
   dataImportazione: string;
-
   imponibile: number;
   iva: number;
   totale: number;
-
   origine: 'XML' | 'ZIP/XML' | 'Manuale' | 'Bolla IA';
-
   righe: RigaAcquistoSalvata[];
   scadenze: ScadenzaAcquistoSalvata[];
 };
@@ -75,18 +69,29 @@ export type BozzaImportazione = {
   documenti: DocumentoAcquistoSalvato[];
 };
 
+export type StoricoImportazioneAcquisti = {
+  id: string;
+  nomeArchivio: string;
+  importatoIl: string;
+  documentiAnalizzati: number;
+  documentiImportati: number;
+  duplicatiIgnorati: number;
+  totaleAnalizzato: number;
+  totaleImportato: number;
+  origine: 'XML' | 'ZIP/XML' | 'Aruba';
+};
+
 const DOCUMENTI_KEY = 'slm_v6_documenti_acquisto';
 const BOZZA_KEY = 'slm_v6_bozza_importazione';
 const REGOLE_KEY = 'slm_v6_regole_classificazione';
+const STORICO_IMPORTAZIONI_KEY = 'slm_v6_storico_importazioni_acquisti';
 
 function leggiJson<T>(chiave: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
 
   try {
     const valore = localStorage.getItem(chiave);
-
     if (!valore) return fallback;
-
     return JSON.parse(valore) as T;
   } catch {
     return fallback;
@@ -95,21 +100,12 @@ function leggiJson<T>(chiave: string, fallback: T): T {
 
 function salvaJson<T>(chiave: string, valore: T): void {
   if (typeof window === 'undefined') return;
-
   localStorage.setItem(chiave, JSON.stringify(valore));
 }
 
-export function segnoTipoDocumento(
-  tipoDocumento: string
-): 1 | -1 {
+export function segnoTipoDocumento(tipoDocumento: string): 1 | -1 {
   const tipo = tipoDocumento.trim().toUpperCase();
-
-  // TD04 = nota di credito.
-  // TD08 = nota di credito semplificata.
-  if (tipo === 'TD04' || tipo === 'TD08') {
-    return -1;
-  }
-
+  if (tipo === 'TD04' || tipo === 'TD08') return -1;
   return 1;
 }
 
@@ -144,10 +140,7 @@ export function creaChiaveDuplicato({
 
 export function caricaDocumentiAcquisto():
   DocumentoAcquistoSalvato[] {
-  return leggiJson<DocumentoAcquistoSalvato[]>(
-    DOCUMENTI_KEY,
-    []
-  );
+  return leggiJson<DocumentoAcquistoSalvato[]>(DOCUMENTI_KEY, []);
 }
 
 export function salvaDocumentiAcquisto(
@@ -160,11 +153,11 @@ export function importaDocumentiSenzaDuplicati(
   nuoviDocumenti: DocumentoAcquistoSalvato[]
 ): {
   documentiFinali: DocumentoAcquistoSalvato[];
+  documentiImportati: DocumentoAcquistoSalvato[];
   importati: number;
   duplicati: number;
 } {
   const esistenti = caricaDocumentiAcquisto();
-
   const chiaviEsistenti = new Set(
     esistenti.map((documento) => documento.chiaveDuplicato)
   );
@@ -183,14 +176,43 @@ export function importaDocumentiSenzaDuplicati(
   });
 
   const documentiFinali = [...daImportare, ...esistenti];
-
   salvaDocumentiAcquisto(documentiFinali);
 
   return {
     documentiFinali,
+    documentiImportati: daImportare,
     importati: daImportare.length,
     duplicati,
   };
+}
+
+export function caricaStoricoImportazioniAcquisti():
+  StoricoImportazioneAcquisti[] {
+  return leggiJson<StoricoImportazioneAcquisti[]>(
+    STORICO_IMPORTAZIONI_KEY,
+    []
+  );
+}
+
+export function registraImportazioneAcquisti(
+  voce: Omit<StoricoImportazioneAcquisti, 'id' | 'importatoIl'>
+): StoricoImportazioneAcquisti[] {
+  const storico = caricaStoricoImportazioniAcquisti();
+
+  const nuovaVoce: StoricoImportazioneAcquisti = {
+    ...voce,
+    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    importatoIl: new Date().toISOString(),
+  };
+
+  const aggiornato = [nuovaVoce, ...storico].slice(0, 200);
+  salvaJson(STORICO_IMPORTAZIONI_KEY, aggiornato);
+  return aggiornato;
+}
+
+export function eliminaStoricoImportazioniAcquisti(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(STORICO_IMPORTAZIONI_KEY);
 }
 
 export function salvaBozzaImportazione(
@@ -201,15 +223,11 @@ export function salvaBozzaImportazione(
 
 export function caricaBozzaImportazione():
   BozzaImportazione | null {
-  return leggiJson<BozzaImportazione | null>(
-    BOZZA_KEY,
-    null
-  );
+  return leggiJson<BozzaImportazione | null>(BOZZA_KEY, null);
 }
 
 export function eliminaBozzaImportazione(): void {
   if (typeof window === 'undefined') return;
-
   localStorage.removeItem(BOZZA_KEY);
 }
 
@@ -242,10 +260,7 @@ export function creaChiaveClassificazione({
 
 export function caricaRegoleClassificazione():
   RegoleClassificazione {
-  return leggiJson<RegoleClassificazione>(
-    REGOLE_KEY,
-    {}
-  );
+  return leggiJson<RegoleClassificazione>(REGOLE_KEY, {});
 }
 
 export function salvaRegoleClassificazione(
@@ -274,7 +289,6 @@ export function memorizzaClassificazione({
   });
 
   regole[chiave] = categoria;
-
   salvaRegoleClassificazione(regole);
 }
 
@@ -324,6 +338,26 @@ export function totalePerCategoria(
   }, 0);
 }
 
+export function filtraDocumentiPerIntervallo({
+  documenti,
+  dataDal,
+  dataAl,
+}: {
+  documenti: DocumentoAcquistoSalvato[];
+  dataDal: string;
+  dataAl: string;
+}): DocumentoAcquistoSalvato[] {
+  if (!dataDal && !dataAl) return documenti;
+
+  return documenti.filter((documento) => {
+    const data = documento.dataDocumento;
+    if (!data) return false;
+    if (dataDal && data < dataDal) return false;
+    if (dataAl && data > dataAl) return false;
+    return true;
+  });
+}
+
 export function filtraPerCompetenzaGestionale({
   documenti,
   anno,
@@ -336,7 +370,6 @@ export function filtraPerCompetenzaGestionale({
   const meseTesto = String(mese).padStart(2, '0');
   const prefisso = `${anno}-${meseTesto}`;
 
-  // Il controllo di gestione usa sempre la data documento.
   return documenti.filter((documento) =>
     documento.dataDocumento.startsWith(prefisso)
   );
@@ -354,7 +387,6 @@ export function filtraPerRicezioneContabile({
   const meseTesto = String(mese).padStart(2, '0');
   const prefisso = `${anno}-${meseTesto}`;
 
-  // Il controllo documentale usa la data di ricezione.
   return documenti.filter((documento) =>
     documento.dataRicezione.startsWith(prefisso)
   );
