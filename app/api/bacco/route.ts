@@ -271,20 +271,19 @@ export async function POST(request: Request) {
         .join(' ')
         .trim();
 
-      if (
-        testoRiga
-          .toUpperCase()
-          .startsWith('DA ')
-      ) {
-        const date = testoRiga.match(
-          /DA\s+(\d{2}\/\d{2}\/\d{4})\s+A\s+(\d{2}\/\d{2}\/\d{4})/i
-        );
+      /*
+       * Il periodo può essere esportato da Bacco in più formati:
+       * - DA 01/07/2026 A 31/07/2026
+       * - DA DATA 01/07/2026 A DATA 31/07/2026
+       * - Da Data 01/07/2026 a Data 31/07/2026
+       */
+      const datePeriodo = testoRiga.match(
+        /DA\s*(?:DATA)?\s*(\d{2}\/\d{2}\/\d{4})\s*A\s*(?:DATA)?\s*(\d{2}\/\d{2}\/\d{4})/i
+      );
 
-        if (date) {
-          periodoDa = dataIsoDaItaliana(date[1]);
-          periodoA = dataIsoDaItaliana(date[2]);
-        }
-
+      if (datePeriodo) {
+        periodoDa = dataIsoDaItaliana(datePeriodo[1]);
+        periodoA = dataIsoDaItaliana(datePeriodo[2]);
         return;
       }
 
@@ -314,12 +313,15 @@ export async function POST(request: Request) {
       }
 
       if (colonnaA === 'Coperti:') {
-        coperti = intero(
-          colonnaB.replace(/[^\d,.-]/g, '')
-        );
-        sezione = '';
-        return;
-      }
+  const match = colonnaB.match(/\d+/);
+
+  coperti = match
+    ? parseInt(match[0], 10)
+    : 0;
+
+  sezione = '';
+  return;
+}
 
       if (colonnaA === 'Produzione:') {
         produzioneLorda = numero(colonnaB);

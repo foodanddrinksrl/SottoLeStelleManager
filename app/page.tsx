@@ -298,38 +298,99 @@ const [pdfLoading, setPdfLoading] =
     });
   }
 
-  function saveTurno() {
-    const snap = {
+  function creaSnapshotSettimana(): Snapshot {
+    return {
       id: Date.now(),
       savedAt: new Date().toLocaleString('it-IT'),
-      weekInfo,
-      employees,
-      schedule,
-      closed,
-      dayRests,
+      weekInfo: { ...weekInfo },
+      employees: employees.map((dipendente) => ({
+        ...dipendente,
+      })),
+      schedule: Object.fromEntries(
+        Object.entries(schedule).map(([chiave, nomi]) => [
+          chiave,
+          [...nomi],
+        ])
+      ),
+      closed: { ...closed },
+      dayRests: { ...dayRests },
     };
+  }
 
-    setHistory((h) => {
-      const idx = h.findIndex((x) => x.weekInfo.start === weekInfo.start);
-      if (idx >= 0) {
-        const c = [...h];
-        c[idx] = { ...snap, id: c[idx].id };
-        return c;
-      }
-      return [snap, ...h];
-    });
+  function inserisciOAggiornaSnapshot(
+    storicoCorrente: Snapshot[],
+    snapshot: Snapshot
+  ): Snapshot[] {
+    const indiceEsistente = storicoCorrente.findIndex(
+      (elemento) =>
+        elemento.weekInfo.start === snapshot.weekInfo.start
+    );
 
-    alert('Turno salvato nello storico.');
+    if (indiceEsistente >= 0) {
+      const storicoAggiornato = [...storicoCorrente];
+
+      storicoAggiornato[indiceEsistente] = {
+        ...snapshot,
+        id: storicoCorrente[indiceEsistente].id,
+      };
+
+      return storicoAggiornato;
+    }
+
+    return [snapshot, ...storicoCorrente];
+  }
+
+  function saveTurno() {
+    const snapshot = creaSnapshotSettimana();
+
+    setHistory((storicoCorrente) =>
+      inserisciOAggiornaSnapshot(
+        storicoCorrente,
+        snapshot
+      )
+    );
+
+    alert(
+      'Settimana salvata correttamente nello storico.'
+    );
   }
 
   function replicaSettimanaSuccessiva() {
-    const nuovaSettimana = makeWeekInfo(new Date(addDays(weekInfo.start, 7) + 'T00:00:00'));
+    const snapshotSettimanaCorrente =
+      creaSnapshotSettimana();
+
+    setHistory((storicoCorrente) =>
+      inserisciOAggiornaSnapshot(
+        storicoCorrente,
+        snapshotSettimanaCorrente
+      )
+    );
+
+    const dataNuovaSettimana = new Date(
+      `${addDays(weekInfo.start, 7)}T00:00:00`
+    );
+
+    const nuovaSettimana =
+      makeWeekInfo(dataNuovaSettimana);
+
     setWeekInfo(nuovaSettimana);
-    setSchedule({ ...schedule });
+
+    setSchedule(
+      Object.fromEntries(
+        Object.entries(schedule).map(([chiave, nomi]) => [
+          chiave,
+          [...nomi],
+        ])
+      )
+    );
+
     setClosed({ ...closed });
     setDayRests({ ...dayRests });
     setTab('calendario');
-    alert('Settimana replicata alla settimana successiva.');
+
+    alert(
+      'Settimana corrente salvata nello storico e turni replicati alla settimana successiva.'
+    );
   }
 async function creaPdfCollaboratori(): Promise<File> {
   const contenitore = pdfContainerRef.current;
@@ -506,11 +567,24 @@ async function condividiPdfWhatsApp() {
   }
 }
   function openSnapshot(snapshot: Snapshot) {
-    setWeekInfo(snapshot.weekInfo);
-  
-    setSchedule(snapshot.schedule);
-    setClosed(snapshot.closed);
-    setDayRests(snapshot.dayRests);
+    setWeekInfo({ ...snapshot.weekInfo });
+
+    setEmployees(
+      snapshot.employees.map((dipendente) => ({
+        ...dipendente,
+      }))
+    );
+
+    setSchedule(
+      Object.fromEntries(
+        Object.entries(snapshot.schedule).map(
+          ([chiave, nomi]) => [chiave, [...nomi]]
+        )
+      )
+    );
+
+    setClosed({ ...snapshot.closed });
+    setDayRests({ ...snapshot.dayRests });
     setTab('calendario');
   }
 

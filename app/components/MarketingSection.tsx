@@ -66,10 +66,22 @@ type ImportResult = {
   error?: string;
 };
 
+type SendProgress = {
+  active: boolean;
+  total: number;
+  processed: number;
+  sent: number;
+  failed: number;
+  pending: number;
+  percent: number;
+};
+
 const OCTOTABLE_URL =
   'https://book.octotable.com/otb/form/index.xhtml?pubkey=6321a9639e364497a9a5d460525f6bfe&property=115839';
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
+const SEND_BATCH_SIZE = 500;
 
 
 function normalizzaNumero(phone: string) {
@@ -168,6 +180,9 @@ export function MarketingSection() {
   const [campaigns, setCampaigns] =
     useState<ApiCampaign[]>([]);
 
+  const [showSavedCampaigns, setShowSavedCampaigns] =
+    useState(false);
+
   const [contacts, setContacts] =
     useState<MarketingContact[]>([]);
 
@@ -198,6 +213,9 @@ export function MarketingSection() {
 
   const [testResult, setTestResult] =
     useState('');
+
+  const [sendProgress, setSendProgress] =
+    useState<SendProgress | null>(null);
 
   const [name, setName] =
     useState('');
@@ -391,6 +409,7 @@ export function MarketingSection() {
     setImagePreview('');
     setImageFile(null);
     setImageUrl('');
+    setSendProgress(null);
   }
 
   function openEditor() {
@@ -432,6 +451,42 @@ export function MarketingSection() {
           .filter(numeroValido)
       )
     ) as string[];
+  }
+
+  async function aggiornaProgressoInvio(
+    campaignId: string
+  ) {
+    try {
+      const response = await fetch(
+        `/api/campaigns/progress?campaignId=${encodeURIComponent(
+          campaignId
+        )}`,
+        {
+          cache: 'no-store',
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.ok) {
+        return;
+      }
+
+      setSendProgress({
+        active: true,
+        total: result.total ?? 0,
+        processed: result.processed ?? 0,
+        sent: result.sent ?? 0,
+        failed: result.failed ?? 0,
+        pending: result.pending ?? 0,
+        percent: result.percent ?? 0,
+      });
+    } catch (error) {
+      console.error(
+        'Errore aggiornamento progresso invio:',
+        error
+      );
+    }
   }
 
   function validateCampaign(
@@ -612,9 +667,141 @@ export function MarketingSection() {
       }
 
       if (prepareSend) {
-        alert(
-          `Campagna preparata con ${recipients.length} destinatari.\n\nIl pulsante di invio reale verrà collegato appena Meta renderà disponibili template e credenziali WhatsApp.`
+        const campaignId =
+          result.campaign?.id ??
+          result.campaignId ??
+          result.id;
+
+        if (!campaignId) {
+          throw new Error(
+            'Campagna salvata, ma non è stato restituito il suo ID.'
+          );
+        }
+
+        setSendProgress({
+          active: true,
+          total: recipients.length,
+          processed: 0,
+          sent: 0,
+          failed: 0,
+          pending: recipients.length,
+          percent: 0,
+        });
+
+        await aggiornaProgressoInvio(
+          campaignId
         );
+
+        const progressTimer =
+          window.setInterval(() => {
+            void aggiornaProgressoInvio(
+              campaignId
+            );
+          }, 1000);
+
+        try {
+          let totalSent = 0;
+          let totalFailed = 0;
+          let remaining = recipients.length;
+          let batchNumber = 0;
+
+          while (remaining > 0) {
+            batchNumber += 1;
+
+            const sendResponse = await fetch(
+              '/api/campaigns/send',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type':
+                    'application/json',
+                },
+                body: JSON.stringify({
+                  campaignId,
+                  maxRecipients:
+                    SEND_BATCH_SIZE,
+                }),
+              }
+            );
+
+            const sendResult =
+              await sendResponse.json();
+
+            if (
+              !sendResponse.ok ||
+              !sendResult.ok
+            ) {
+              throw new Error(
+                sendResult.error ||
+                  sendResult.message ||
+                  'Invio WhatsApp non riuscito.'
+              );
+            }
+
+            const sentThisBatch =
+              sendResult.sent ?? 0;
+
+            const failedThisBatch =
+              sendResult.failed ?? 0;
+
+            totalSent += sentThisBatch;
+            totalFailed += failedThisBatch;
+
+            remaining =
+              sendResult.remaining ?? 0;
+
+            await aggiornaProgressoInvio(
+              campaignId
+            );
+
+            const processedThisBatch =
+              sentThisBatch +
+              failedThisBatch;
+
+            if (
+              remaining > 0 &&
+              processedThisBatch === 0
+            ) {
+              throw new Error(
+                `Invio fermato per sicurezza: restano ${remaining} destinatari, ma il gruppo ${batchNumber} non ha elaborato nessun contatto.`
+              );
+            }
+
+            if (remaining > 0) {
+              await new Promise(
+                (resolve) =>
+                  window.setTimeout(
+                    resolve,
+                    1500
+                  )
+              );
+            }
+          }
+
+          setSendProgress({
+            active: false,
+            total: recipients.length,
+            processed:
+              totalSent + totalFailed,
+            sent: totalSent,
+            failed: totalFailed,
+            pending: 0,
+            percent: 100,
+          });
+
+          alert(
+            `✅ Invio completato\n\n` +
+              `Gruppi da: ${SEND_BATCH_SIZE}\n` +
+              `Inviati: ${totalSent}\n` +
+              `Errori: ${totalFailed}\n` +
+              `Rimanenti: 0\n` +
+              `Gruppi elaborati: ${batchNumber}`
+          );
+        } finally {
+          window.clearInterval(
+            progressTimer
+          );
+        }
       } else {
         alert(
           status === 'scheduled'
@@ -641,6 +828,167 @@ export function MarketingSection() {
     } finally {
       setLoading(false);
       setUploadingImage(false);
+    }
+  }
+
+  async function continuaCampagnaSalvata(
+    campaign: ApiCampaign
+  ) {
+    try {
+      setLoading(true);
+
+      const progressResponse = await fetch(
+        `/api/campaigns/progress?campaignId=${encodeURIComponent(
+          campaign.id
+        )}`,
+        {
+          cache: 'no-store',
+        }
+      );
+
+      const progressResult =
+        await progressResponse.json();
+
+      if (
+        !progressResponse.ok ||
+        !progressResult.ok
+      ) {
+        throw new Error(
+          progressResult.error ||
+            'Impossibile controllare i destinatari rimanenti.'
+        );
+      }
+
+      const exactPending =
+        Number(progressResult.pending ?? 0);
+
+      const exactTotal =
+        Number(progressResult.total ?? 0);
+
+      const alreadySent =
+        Number(progressResult.sent ?? 0);
+
+      const alreadyFailed =
+        Number(progressResult.failed ?? 0);
+
+      if (exactPending === 0) {
+        alert(
+          `Questa campagna non ha destinatari in attesa.\n\n` +
+            `Totale: ${exactTotal}\n` +
+            `Già inviati: ${alreadySent}\n` +
+            `Errori: ${alreadyFailed}`
+        );
+        return;
+      }
+
+      const confirmed = window.confirm(
+        `Continuare questa campagna?\n\n` +
+          `Campagna: ${campaign.name}\n` +
+          `Totale campagna: ${exactTotal}\n` +
+          `Già inviati: ${alreadySent}\n` +
+          `Errori già registrati: ${alreadyFailed}\n` +
+          `Ancora da inviare: ${exactPending}\n\n` +
+          `Procederò automaticamente a gruppi da ${SEND_BATCH_SIZE}.\n` +
+          `I destinatari già inviati NON verranno reinviati.`
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      let remaining = exactPending;
+      let totalSent = 0;
+      let totalFailed = 0;
+      let batchNumber = 0;
+
+      while (remaining > 0) {
+        batchNumber += 1;
+
+        const response = await fetch(
+          '/api/campaigns/send',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              campaignId: campaign.id,
+              maxRecipients:
+                SEND_BATCH_SIZE,
+            }),
+          }
+        );
+
+        const result =
+          await response.json();
+
+        if (!response.ok || !result.ok) {
+          throw new Error(
+            result.error ||
+              result.message ||
+              'Impossibile continuare l’invio.'
+          );
+        }
+
+        const sentThisBatch =
+          Number(result.sent ?? 0);
+
+        const failedThisBatch =
+          Number(result.failed ?? 0);
+
+        totalSent += sentThisBatch;
+        totalFailed += failedThisBatch;
+
+        remaining =
+          Number(result.remaining ?? 0);
+
+        const processedThisBatch =
+          sentThisBatch +
+          failedThisBatch;
+
+        if (
+          remaining > 0 &&
+          processedThisBatch === 0
+        ) {
+          throw new Error(
+            `Invio fermato per sicurezza: restano ${remaining} destinatari, ma il gruppo ${batchNumber} non ha elaborato nessun contatto.`
+          );
+        }
+
+        if (remaining > 0) {
+          await new Promise(
+            (resolve) =>
+              window.setTimeout(
+                resolve,
+                1500
+              )
+          );
+        }
+      }
+
+      await loadCampaigns();
+
+      alert(
+        `✅ Campagna completata\n\n` +
+          `Nuovi inviati: ${totalSent}\n` +
+          `Nuovi errori: ${totalFailed}\n` +
+          `Rimanenti: 0\n` +
+          `Gruppi elaborati: ${batchNumber}`
+      );
+    } catch (error) {
+      console.error(
+        'Errore continuazione campagna:',
+        error
+      );
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Errore durante la continuazione della campagna.'
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -1446,13 +1794,83 @@ export function MarketingSection() {
               </div>
 
               <p className="muted">
-                Per ora “Invia campagna”
-                prepara e salva tutti i
-                destinatari. L’invio reale
-                verrà collegato alle API
-                Meta senza cambiare questa
-                schermata.
+                Durante l’invio vedrai
+                avanzamento, percentuale,
+                messaggi inviati ed eventuali
+                errori in tempo reale.
               </p>
+
+              {sendProgress && (
+                <div
+                  style={{
+                    marginTop: 18,
+                    padding: 16,
+                    border:
+                      '1px solid rgba(255,255,255,0.18)',
+                    borderRadius: 14,
+                  }}
+                >
+                  <strong>
+                    {sendProgress.active
+                      ? '🚀 Invio in corso...'
+                      : '✅ Invio terminato'}
+                  </strong>
+
+                  <p
+                    style={{
+                      marginTop: 10,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {sendProgress.processed} /{' '}
+                    {sendProgress.total}{' '}
+                    destinatari elaborati
+                  </p>
+
+                  <div
+                    style={{
+                      width: '100%',
+                      height: 18,
+                      borderRadius: 999,
+                      overflow: 'hidden',
+                      background:
+                        'rgba(255,255,255,0.12)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${Math.min(
+                          sendProgress.percent,
+                          100
+                        )}%`,
+                        height: '100%',
+                        borderRadius: 999,
+                        background:
+                          'currentColor',
+                        transition:
+                          'width 0.35s ease',
+                      }}
+                    />
+                  </div>
+
+                  <p
+                    style={{
+                      marginTop: 10,
+                      marginBottom: 0,
+                    }}
+                  >
+                    <strong>
+                      {sendProgress.percent}%
+                    </strong>
+                    {' · '}✅{' '}
+                    {sendProgress.sent}
+                    {' · '}❌{' '}
+                    {sendProgress.failed}
+                    {' · '}⏳{' '}
+                    {sendProgress.pending}
+                  </p>
+                </div>
+              )}
 
               <hr
                 style={{
@@ -1709,7 +2127,24 @@ export function MarketingSection() {
           )}
         </div>
 
-        {campaigns.length > 0 && (
+        <div className="card">
+          <button
+            type="button"
+            className="btn green"
+            onClick={() =>
+              setShowSavedCampaigns(
+                (current) => !current
+              )
+            }
+          >
+            {showSavedCampaigns
+              ? '▲ Nascondi campagne salvate'
+              : `📋 Campagne salvate (${campaigns.length})`}
+          </button>
+        </div>
+
+        {showSavedCampaigns &&
+          campaigns.length > 0 && (
           <div className="card">
             <h2>
               📋 Campagne salvate
@@ -1731,6 +2166,7 @@ export function MarketingSection() {
                     <th>
                       Programmata
                     </th>
+                    <th>Azioni</th>
                   </tr>
                 </thead>
 
@@ -1803,6 +2239,28 @@ export function MarketingSection() {
                         <td>
                           {formattaData(
                             campaign.scheduled_at
+                          )}
+                        </td>
+
+                        <td>
+                          {campaign.status ===
+                          'sent' ? (
+                            <span className="muted">
+                              Completata
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn green"
+                              disabled={loading}
+                              onClick={() =>
+                                void continuaCampagnaSalvata(
+                                  campaign
+                                )
+                              }
+                            >
+                              ▶ Controlla / continua invio
+                            </button>
                           )}
                         </td>
                       </tr>

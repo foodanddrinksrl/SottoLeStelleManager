@@ -15,17 +15,32 @@ type MetaResult = {
     message?: string;
     code?: number;
     error_subcode?: number;
+    error_data?: {
+      details?: string;
+    };
   };
 };
 
-const TEMPLATE_NAME =
-  'prenota_tavolo_sotto_le_stelle';
+type CampaignRow = {
+  id: string;
+  name: string;
+  status: string;
+  image_url?: string | null;
+};
+
+type RecipientRow = {
+  id: string;
+  phone: string;
+  customer_name?: string | null;
+  message_status: string;
+};
+
+const TEMPLATE_NAME = 'ritorna_da_noi';
 
 const TEMPLATE_LANGUAGE =
-  process.env.WHATSAPP_TEMPLATE_LANGUAGE ||
-  'it';
+  process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'it';
 
-const MAX_TEST_RECIPIENTS = 5;
+const MAX_TEST_RECIPIENTS = 10000;
 
 function rispostaErrore(
   error: string,
@@ -61,12 +76,35 @@ function normalizzaTelefono(value: string) {
   return numero;
 }
 
-async function inviaTemplate(
-  phone: string,
-  accessToken: string,
-  phoneNumberId: string,
-  graphApiVersion: string
-) {
+function telefonoValido(numero: string) {
+  return numero.length >= 11 && numero.length <= 15;
+}
+
+function normalizzaNome(value?: string | null) {
+  const nome = String(value ?? '').trim();
+
+  if (!nome) {
+    return 'Cliente';
+  }
+
+  return nome.slice(0, 60);
+}
+
+async function inviaTemplate({
+  phone,
+  customerName,
+  imageUrl,
+  accessToken,
+  phoneNumberId,
+  graphApiVersion,
+}: {
+  phone: string;
+  customerName: string;
+  imageUrl: string;
+  accessToken: string;
+  phoneNumberId: string;
+  graphApiVersion: string;
+}) {
   const response = await fetch(
     `https://graph.facebook.com/${graphApiVersion}/${phoneNumberId}/messages`,
     {
@@ -85,13 +123,34 @@ async function inviaTemplate(
           language: {
             code: TEMPLATE_LANGUAGE,
           },
+          components: [
+            {
+              type: 'header',
+              parameters: [
+                {
+                  type: 'image',
+                  image: {
+                    link: imageUrl,
+                  },
+                },
+              ],
+            },
+            {
+              type: 'body',
+              parameters: [
+                {
+                  type: 'text',
+                  text: customerName,
+                },
+              ],
+            },
+          ],
         },
       }),
     }
   );
 
-  const result =
-    (await response.json()) as MetaResult;
+  const result = (await response.json()) as MetaResult;
 
   return {
     ok: response.ok,
@@ -116,7 +175,7 @@ export async function POST(request: Request) {
 
     if (!accessToken || !phoneNumberId) {
       return rispostaErrore(
-        'Credenziali WhatsApp mancanti nel file .env.local.',
+        'Credenziali WhatsApp mancanti. Controlla WHATSAPP_ACCESS_TOKEN e WHATSAPP_PHONE_NUMBER_ID.',
         500
       );
     }
@@ -128,18 +187,20 @@ export async function POST(request: Request) {
       String(body.campaignId ?? '').trim();
 
     const requestedLimit =
-      Number(body.maxRecipients ?? MAX_TEST_RECIPIENTS);
-
-    const maxRecipients =
-      Math.min(
-        Math.max(
-          Number.isFinite(requestedLimit)
-            ? Math.floor(requestedLimit)
-            : MAX_TEST_RECIPIENTS,
-          1
-        ),
-        MAX_TEST_RECIPIENTS
+      Number(
+        body.maxRecipients ??
+          MAX_TEST_RECIPIENTS
       );
+
+    const maxRecipients = Math.min(
+      Math.max(
+        Number.isFinite(requestedLimit)
+          ? Math.floor(requestedLimit)
+          : MAX_TEST_RECIPIENTS,
+        1
+      ),
+      MAX_TEST_RECIPIENTS
+    );
 
     if (!campaignId) {
       return rispostaErrore(
@@ -148,13 +209,18 @@ export async function POST(request: Request) {
     }
 
     const {
-      data: campaign,
+      data: campaignData,
       error: campaignError,
     } = await supabase
       .from('marketing_campaigns')
-      .select('id, name, status')
+      .select(
+        'id, name, status, image_url'
+      )
       .eq('id', campaignId)
       .single();
+
+    const campaign =
+      campaignData as CampaignRow | null;
 
     if (campaignError || !campaign) {
       return rispostaErrore(
@@ -164,15 +230,35 @@ export async function POST(request: Request) {
       );
     }
 
+    const imageUrl =
+      String(campaign.image_url ?? '').trim();
+
+    if (!imageUrl) {
+      return rispostaErrore(
+        'Questa campagna non contiene un’immagine. Il template ritorna_da_noi richiede un’immagine nell’intestazione.'
+      );
+    }
+
+    if (!imageUrl.startsWith('https://')) {
+      return rispostaErrore(
+        'L’immagine della campagna deve avere un indirizzo pubblico HTTPS.'
+      );
+    }
+
     const {
-      data: recipients,
+      data: recipientsData,
       error: recipientsError,
     } = await supabase
       .from('marketing_recipients')
-      .select('id, phone, message_status')
+      .select(
+        'id, phone, customer_name, message_status'
+      )
       .eq('campaign_id', campaignId)
       .eq('message_status', 'pending')
       .limit(maxRecipients);
+
+    const recipients =
+      (recipientsData ?? []) as RecipientRow[];
 
     if (recipientsError) {
       return rispostaErrore(
@@ -182,7 +268,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!recipients?.length) {
+    if (recipients.length === 0) {
       return rispostaErrore(
         'Non ci sono destinatari in attesa per questa campagna.'
       );
@@ -198,6 +284,7 @@ export async function POST(request: Request) {
 
     let sent = 0;
     let failed = 0;
+
     const errors: Array<{
       phone: string;
       error: string;
@@ -207,14 +294,44 @@ export async function POST(request: Request) {
       const phone =
         normalizzaTelefono(recipient.phone);
 
+      const customerName =
+        normalizzaNome(
+          recipient.customer_name
+        );
+
+      if (!telefonoValido(phone)) {
+        failed += 1;
+
+        const errorMessage =
+          'Numero di telefono non valido.';
+
+        errors.push({
+          phone:
+            recipient.phone ||
+            'numero mancante',
+          error: errorMessage,
+        });
+
+        await supabase
+          .from('marketing_recipients')
+          .update({
+            message_status: 'failed',
+          })
+          .eq('id', recipient.id);
+
+        continue;
+      }
+
       try {
         const metaResponse =
-          await inviaTemplate(
+          await inviaTemplate({
             phone,
+            customerName,
+            imageUrl,
             accessToken,
             phoneNumberId,
-            graphApiVersion
-          );
+            graphApiVersion,
+          });
 
         if (metaResponse.ok) {
           sent += 1;
@@ -229,7 +346,10 @@ export async function POST(request: Request) {
           failed += 1;
 
           const errorMessage =
-            metaResponse.result.error?.message ||
+            metaResponse.result.error
+              ?.error_data?.details ||
+            metaResponse.result.error
+              ?.message ||
             `Errore Meta HTTP ${metaResponse.status}`;
 
           errors.push({
@@ -265,9 +385,8 @@ export async function POST(request: Request) {
           .eq('id', recipient.id);
       }
 
-      // Piccola pausa prudenziale nel collaudo.
       await new Promise((resolve) =>
-        setTimeout(resolve, 250)
+        setTimeout(resolve, 350)
       );
     }
 
@@ -285,13 +404,12 @@ export async function POST(request: Request) {
 
     if (pendingError) {
       console.error(
-        'Errore conteggio pending:',
+        'Errore conteggio destinatari in attesa:',
         pendingError
       );
     }
 
-    const remaining =
-      pendingCount ?? 0;
+    const remaining = pendingCount ?? 0;
 
     const finalStatus =
       sent === 0
@@ -308,7 +426,8 @@ export async function POST(request: Request) {
           remaining === 0 && sent > 0
             ? new Date().toISOString()
             : null,
-        updated_at: new Date().toISOString(),
+        updated_at:
+          new Date().toISOString(),
       })
       .eq('id', campaignId);
 
@@ -324,12 +443,12 @@ export async function POST(request: Request) {
       errors,
       message:
         remaining > 0
-          ? `${sent} inviati, ${failed} errori. Restano ${remaining} destinatari non inviati.`
-          : `${sent} inviati, ${failed} errori. Test completato.`,
+          ? `${sent} messaggi inviati, ${failed} errori. Restano ${remaining} destinatari.`
+          : `${sent} messaggi inviati, ${failed} errori. Invio completato.`,
     });
   } catch (error) {
     console.error(
-      'Errore invio campagna:',
+      'Errore invio campagna WhatsApp:',
       error
     );
 
