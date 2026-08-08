@@ -68,37 +68,169 @@ export async function GET() {
   try {
     const supabase = getSupabaseAdmin();
 
-    const { data, error } = await supabase
+    const {
+      data: campaignsData,
+      error: campaignsError,
+    } = await supabase
       .from('marketing_campaigns')
-      .select(`
-        *,
-        marketing_recipients (
-          id,
-          phone,
-          customer_name,
-          message_status
-        )
-      `)
+      .select('*')
       .order('created_at', {
         ascending: false,
       });
 
-    if (error) {
+    if (campaignsError) {
       console.error(
         'Errore caricamento campagne:',
-        error
+        campaignsError
       );
 
       return rispostaErrore(
-        error.message ||
+        campaignsError.message ||
           'Impossibile caricare le campagne.',
         500
       );
     }
 
+    const campaigns = campaignsData ?? [];
+
+    const enrichedCampaigns =
+      await Promise.all(
+        campaigns.map(async (campaign) => {
+          const [
+            totalResult,
+            pendingResult,
+            sentResult,
+            failedResult,
+          ] = await Promise.all([
+            supabase
+              .from('marketing_recipients')
+              .select('id', {
+                count: 'exact',
+                head: true,
+              })
+              .eq(
+                'campaign_id',
+                campaign.id
+              ),
+
+            supabase
+              .from('marketing_recipients')
+              .select('id', {
+                count: 'exact',
+                head: true,
+              })
+              .eq(
+                'campaign_id',
+                campaign.id
+              )
+              .eq(
+                'message_status',
+                'pending'
+              ),
+
+            supabase
+              .from('marketing_recipients')
+              .select('id', {
+                count: 'exact',
+                head: true,
+              })
+              .eq(
+                'campaign_id',
+                campaign.id
+              )
+              .eq(
+                'message_status',
+                'sent'
+              ),
+
+            supabase
+              .from('marketing_recipients')
+              .select('id', {
+                count: 'exact',
+                head: true,
+              })
+              .eq(
+                'campaign_id',
+                campaign.id
+              )
+              .eq(
+                'message_status',
+                'failed'
+              ),
+          ]);
+
+          const firstError =
+            totalResult.error ||
+            pendingResult.error ||
+            sentResult.error ||
+            failedResult.error;
+
+          if (firstError) {
+            console.error(
+              `Errore conteggi campagna ${campaign.id}:`,
+              firstError
+            );
+          }
+
+          const recipientCount =
+            totalResult.count ?? 0;
+
+          const pendingCount =
+            pendingResult.count ?? 0;
+
+          const sentCount =
+            sentResult.count ?? 0;
+
+          const failedCount =
+            failedResult.count ?? 0;
+
+          let effectiveStatus:
+            CampaignStatus =
+            campaign.status as CampaignStatus;
+
+          if (
+            recipientCount > 0 &&
+            pendingCount === 0 &&
+            sentCount > 0
+          ) {
+            effectiveStatus = 'sent';
+          } else if (
+            recipientCount > 0 &&
+            pendingCount === 0 &&
+            sentCount === 0 &&
+            failedCount > 0
+          ) {
+            effectiveStatus = 'failed';
+          } else if (
+            sentCount > 0 &&
+            pendingCount > 0
+          ) {
+            effectiveStatus = 'sending';
+          }
+
+          return {
+            ...campaign,
+            status: effectiveStatus,
+            recipient_count:
+              recipientCount,
+            pending_count:
+              pendingCount,
+            sent_count:
+              sentCount,
+            failed_count:
+              failedCount,
+
+            // Manteniamo la proprietà per compatibilità
+            // con il frontend, ma non carichiamo più
+            // migliaia di righe solo per contarle.
+            marketing_recipients: [],
+          };
+        })
+      );
+
     return NextResponse.json({
       ok: true,
-      campaigns: data ?? [],
+      campaigns: enrichedCampaigns,
     });
   } catch (error) {
     console.error(
@@ -173,28 +305,30 @@ export async function POST(request: Request) {
     const supabase = getSupabaseAdmin();
     const now = new Date().toISOString();
 
-    const { data: campaign, error: campaignError } =
-      await supabase
-        .from('marketing_campaigns')
-        .insert({
-          name,
-          message,
-          image_url:
-            body.imageUrl?.trim() || null,
-          button_text:
-            body.buttonText?.trim() ||
-            'Prenota il tavolo',
-          button_url:
-            body.buttonUrl?.trim() || null,
-          status,
-          scheduled_at:
-            status === 'scheduled'
-              ? body.scheduledAt
-              : null,
-          updated_at: now,
-        })
-        .select('*')
-        .single();
+    const {
+      data: campaign,
+      error: campaignError,
+    } = await supabase
+      .from('marketing_campaigns')
+      .insert({
+        name,
+        message,
+        image_url:
+          body.imageUrl?.trim() || null,
+        button_text:
+          body.buttonText?.trim() ||
+          'Prenota il tavolo',
+        button_url:
+          body.buttonUrl?.trim() || null,
+        status,
+        scheduled_at:
+          status === 'scheduled'
+            ? body.scheduledAt
+            : null,
+        updated_at: now,
+      })
+      .select('*')
+      .single();
 
     if (campaignError || !campaign) {
       console.error(
@@ -209,21 +343,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const righeDestinatari = recipients.map(
-      (phone) => ({
+    const righeDestinatari =
+      recipients.map((phone) => ({
         campaign_id: campaign.id,
         phone,
         message_status: 'pending',
-      })
-    );
+      }));
 
     const {
-      data: recipientsCreated,
       error: recipientsError,
     } = await supabase
       .from('marketing_recipients')
-      .insert(righeDestinatari)
-      .select('*');
+      .insert(righeDestinatari);
 
     if (recipientsError) {
       console.error(
@@ -248,8 +379,13 @@ export async function POST(request: Request) {
         ok: true,
         campaign: {
           ...campaign,
-          marketing_recipients:
-            recipientsCreated ?? [],
+          recipient_count:
+            recipients.length,
+          pending_count:
+            recipients.length,
+          sent_count: 0,
+          failed_count: 0,
+          marketing_recipients: [],
         },
       },
       { status: 201 }

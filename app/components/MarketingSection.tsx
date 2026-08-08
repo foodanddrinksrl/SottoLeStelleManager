@@ -42,6 +42,10 @@ type ApiCampaign = {
   scheduled_at?: string | null;
   sent_at?: string | null;
   created_at: string;
+  recipient_count?: number;
+  pending_count?: number;
+  sent_count?: number;
+  failed_count?: number;
   marketing_recipients?: ApiRecipient[];
 };
 
@@ -2225,9 +2229,11 @@ export function MarketingSection() {
                         </td>
 
                         <td>
-                          {campaign
-                            .marketing_recipients
-                            ?.length ?? 0}
+                          {campaign.recipient_count ??
+                            campaign
+                              .marketing_recipients
+                              ?.length ??
+                            0}
                         </td>
 
                         <td>
